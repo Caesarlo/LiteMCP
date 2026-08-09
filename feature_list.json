@@ -359,7 +359,7 @@
       "area": "engineering",
       "title": "建立本地 Compose 编排",
       "behavior": "开发者可通过 Compose 启动 database、redis、backend、worker 和 frontend。",
-      "status": "not_started",
+      "status": "in_progress",
       "dependencies": [
         "M0-ENV-001",
         "M0-ENV-002"
