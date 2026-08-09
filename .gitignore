@@ -11,3 +11,7 @@ Thumbs.db
 
 # CodeGraph local index (regenerated per machine via `codegraph init`)
 .codegraph/
+
+# Local environment overrides (ports, etc.) — never committed.
+# .env.example is the committed template.
+.env

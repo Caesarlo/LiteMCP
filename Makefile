@@ -8,7 +8,7 @@
 # Environment: Windows (GNU Make 4.4.1 via chocolatey). Backend tools are invoked
 # through the local venv (uv is not available in WSL bash); node/npm/make are on PATH.
 
-.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr test-openapi update-openapi-snapshot ci-fast
+.PHONY: help test lint build test-postgres test-mysql test-db-matrix test-db-types validate-env-example validate-adr test-openapi update-openapi-snapshot ci-fast
 
 help:
 	@echo "LiteMCP unified management entry point."
@@ -20,6 +20,9 @@ help:
 	@echo "  make test-postgres    PostgreSQL dialect contract tests (needs M0-BOOT-001 compose + M1 dialect)"
 	@echo "  make test-mysql       MySQL dialect contract tests (needs M0-BOOT-001 compose + M1 dialect)"
 	@echo "  make test-db-matrix   full two-dialect matrix (needs M0-BOOT-001 compose + M1 dialect)"
+	@echo ""
+	@echo "Dialect contract:"
+	@echo "  make test-db-types     M1-DB-002 cross-dialect type contract on live PostgreSQL + MySQL"
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make ci-fast                 run all seven fast CI legs: backend lint/type/unit + frontend lint/type/unit/build (M0-CI-001)"
@@ -67,6 +70,11 @@ test-mysql:
 test-db-matrix:
 	@echo "[make test-db-matrix] Full two-dialect matrix is not available yet: requires M0-BOOT-001 (compose) and M1-DB-* (dialect types/contract tests). Refusing to false-pass."
 	@exit 1
+
+test-db-types:
+	docker compose up -d --wait database
+	docker compose --profile dialects up -d --wait mysql
+	cd backend && .venv/Scripts/python.exe -m pytest tests/db/test_types.py -q
 
 validate-env-example:
 	node scripts/validate-env-example.js

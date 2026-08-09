@@ -25,6 +25,8 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-litemcp}
       POSTGRES_DB: litemcp
     ports:
+      # Standard host port 5432 by default; override with POSTGRES_PORT in a
+      # root .env (e.g. when a locally installed PostgreSQL occupies 5432).
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -96,5 +98,31 @@ services:
     depends_on:
       - backend
 
+  # MySQL 8 dialect service for the M1 two-dialect contract matrix (M1-DB-002+).
+  # Deliberately NOT part of the default `docker compose up` — the default
+  # environment stays a single relational DB (PostgreSQL only, 00-overview
+  # §5.3). Start it explicitly for the dialect contract suite with:
+  #   docker compose --profile dialects up -d mysql
+  mysql:
+    profiles: ["dialects"]
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-litemcp-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-litemcp}
+      MYSQL_USER: ${MYSQL_USER:-litemcp}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-litemcp}
+    ports:
+      # Standard host port 3306 by default; override with MYSQL_PORT in a
+      # root .env (e.g. when a locally installed mysqld occupies 3306).
+      - "${MYSQL_PORT:-3306}:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
+  mysql_data:
