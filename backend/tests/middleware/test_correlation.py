@@ -61,14 +61,31 @@ _REQUEST_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _MAX_REQUEST_ID_BYTES = 128
 
 
-@app.get(PROBE_PATH, name="test_probe_request_id")
-def _probe_request_id(request: Request) -> dict:
-    """Echo the request_id that request handling code can read.
+@pytest.fixture(scope="module", autouse=True)
+def _probe_route():
+    """Register the test-only probe route for this module, then remove it.
 
     Pins docs/07 L212-213/L227: the middleware must expose the current
     request_id to request handling code via ``request.state.request_id``.
+
+    The route is registered lazily (not at module import time) and removed
+    after this module's tests so the shared ``app`` is restored to its
+    pristine state. It must never leak into the committed OpenAPI snapshot
+    gate (M0-CONTRACT-001) or into other test modules that observe the app.
     """
-    return {"request_id": request.state.request_id}
+
+    @app.get(PROBE_PATH, name="test_probe_request_id")
+    def _probe_request_id(request: Request) -> dict:
+        return {"request_id": request.state.request_id}
+
+    yield
+
+    app.routes[:] = [
+        route
+        for route in app.routes
+        if getattr(route, "name", None) != "test_probe_request_id"
+    ]
+    app.openapi_schema = None  # drop any cached schema built with the probe route
 
 
 # ---------------------------------------------------------------------------
