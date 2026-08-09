@@ -8,7 +8,7 @@
 # Environment: Windows (GNU Make 4.4.1 via chocolatey). Backend tools are invoked
 # through the local venv (uv is not available in WSL bash); node/npm/make are on PATH.
 
-.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr test-openapi update-openapi-snapshot
+.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr test-openapi update-openapi-snapshot ci-fast
 
 help:
 	@echo "LiteMCP unified management entry point."
@@ -22,6 +22,7 @@ help:
 	@echo "  make test-db-matrix   full two-dialect matrix (needs M0-BOOT-001 compose + M1 dialect)"
 	@echo ""
 	@echo "Other targets:"
+	@echo "  make ci-fast                 run all seven fast CI legs: backend lint/type/unit + frontend lint/type/unit/build (M0-CI-001)"
 	@echo "  make test-openapi            gate the committed OpenAPI snapshot against the live spec (M0-CONTRACT-001)"
 	@echo "  make update-openapi-snapshot regenerate and commit the OpenAPI snapshot after an intended contract change (M0-CONTRACT-001)"
 	@echo "  make validate-env-example   gate .env.example coverage and no real secrets (M0-ENV-002)"
@@ -38,6 +39,22 @@ lint:
 build:
 	cd backend && .venv/Scripts/python.exe -m compileall -q src
 	cd frontend && npm run build
+
+ci-fast:
+	@echo "ci-fast: backend lint (ruff)"
+	cd backend && .venv/Scripts/ruff.exe check src tests
+	@echo "ci-fast: backend type (mypy)"
+	cd backend && .venv/Scripts/python.exe -m mypy src
+	@echo "ci-fast: backend unit (pytest)"
+	cd backend && .venv/Scripts/python.exe -m pytest
+	@echo "ci-fast: frontend lint (eslint)"
+	cd frontend && npm run lint
+	@echo "ci-fast: frontend type (tsc)"
+	cd frontend && npx tsc
+	@echo "ci-fast: frontend unit (vitest)"
+	cd frontend && npm run test -- --run
+	@echo "ci-fast: frontend build (vite)"
+	cd frontend && npx vite build
 
 test-postgres:
 	@echo "[make test-postgres] PostgreSQL dialect contract matrix is not available yet: requires M0-BOOT-001 (compose) and M1-DB-* (dialect types/contract tests). Refusing to false-pass."
