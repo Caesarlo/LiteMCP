@@ -18,7 +18,7 @@
 - **[决定]** 只执行由不可变 source artifact 和已验证 build artifact 产生的 Linux 容器；不在 backend/worker 宿主进程中 `exec` 用户命令。
 - **[决定]** 构建、协议探测和正式运行是三个隔离阶段；任何阶段失败都不能改变当前 active config/toolset 指针。
 - **[决定]** 使用 MCP 官方 SDK 的 stdio client transport，遵守 MCP `2025-11-25` 初始化、能力协商、取消和关闭语义，不自创 framing。
-- **[决定]** 同一运行实例一次只执行一个 `tools/call`；有界队列提供背压。通知、响应匹配和控制消息仍由 bridge 持续读取，不能因业务串行而停止读 stdout。
+- **[决定]** 同一 service 的运行面是一个**实例池**（默认池大小 1，可配置上限），单个实例内允许多个并发在途 `tools/call`（默认并发 1，可配置上限），二者都是显式配置而不是隐式行为；有界队列在池整体饱和时提供背压。通知、响应匹配和控制消息仍由 bridge 持续读取，不能因业务处理而停止读 stdout。详见第 8 章。
 - **[决定]** Linux 是正式运行平台。Windows/macOS 开发通过 Docker Desktop 的 Linux VM 运行同一 Linux 镜像；第一版不支持 Windows container，也不承诺在三种宿主上生成相同 image digest。
 
 ### 1.2 非目标
@@ -88,7 +88,15 @@ Docker socket 即使只读挂载也等价于高权限控制接口。因此 **[�
 
 **[决定]** 用户不能提交自定义 index URL、`--trusted-host`、`-e`、本地路径、VCS/direct URL、嵌套 `-r/-c` 或 pip 全局 option。`requirements.txt` 只接受规范化的 name + exact `==` version + environment marker；FastMCP 版本由 base image/平台约束提供，用户不能覆盖。
 
-生产依赖分两步：resolver 在批准的 index 下载 wheel，生成包含全部传递依赖和 SHA-256 的 lock manifest；builder 随后使用 `--no-index --find-links=<readonly-wheelhouse> --require-hashes --only-binary=:all:` 离线安装。若批准源没有目标平台 wheel，构建明确失败，不回退到 sdist。此设计依据 pip 官方的 [Secure installs](https://pip.pypa.io/en/stable/topics/secure-installs/) 与 [Repeatable installs](https://pip.pypa.io/en/stable/topics/repeatable-installs/)；它牺牲部分包兼容性，换取可复现与避免 build backend 任意联网。
+生产依赖分两步：resolver 在批准的 index 下载 wheel，生成包含全部传递依赖和 SHA-256 的 lock manifest；builder 随后使用 `--no-index --find-links=<readonly-wheelhouse> --require-hashes --only-binary=:all:` 离线安装。若批准源没有目标平台 wheel，构建明确失败，不回退到 sdist。此设计依据 pip 官方的 [Secure installs](https://pip.pypa.io/en/stable/topics/secure-installs/) 与 [Repeatable installs](https://pip.pypa.io/en/stable/topics/repeatable-installs/)；它牺牲部分包兼容性，换取可复现与避免 build backend 任意联网。**[决定] 这条策略不因为业务方"装不上"而放松**——补救路径是运维流程，不是放开 sdist/VCS/自定义 index。
+
+#### 4.2.1 内部批准 wheelhouse（供批准源没有目标平台 wheel 时使用）
+
+- 平台维护一个独立于用户上传流程的**内部批准 wheelhouse**：由平台管理员（不是 service editor）在隔离的构建环境里为特定 `(包名, 版本, 平台)` 组合预先构建/下载可信 wheel，经扫描后签发进这个 wheelhouse，形成 `approved_wheel(name, version, platform, sha256, approved_by, approved_at, source_note, expires_at)` 记录。
+- resolver 在批准 index 找不到目标平台 wheel 时，先查内部批准 wheelhouse；命中则按其登记的 SHA-256 离线安装，语义等同"批准源有 wheel"，不改变 §4.2 的 `--require-hashes --only-binary=:all:` 离线安装规则。
+- 未命中时，editor 在构建失败的 `build_run` 详情页看到明确的 `DEPENDENCY_WHEEL_UNAVAILABLE` reason code 和"申请批准"入口；申请生成一条待处理工单（记录包名/版本/平台/申请人/用途），交给平台管理员离线评估、构建并登记，不在用户请求路径上现场联网抓取或编译——避免把"用户等着的一次构建"和"需要人工评审的供应链变更"混为一次同步操作。
+- 批准记录本身进入 SBOM/审计（`wheelhouse.entry_added/removed`），有 `expires_at`（默认 12 个月）到期需要平台管理员复核是否继续批准，防止批准列表变成无人问津、永不复审的信任黑洞。
+- 这套流程解决"确实需要某个只发 sdist 的包"的合法诉求，同时把"引入新的第三方代码"这个供应链决策留在平台管理员手里，而不是变成 service editor 可以自行绕过的开关。
 
 **[建议]** resolver/Registry 接入恶意包与漏洞扫描、生成 CycloneDX/SPDX SBOM，并按部署策略阻断严重漏洞。扫描器不可用时生产默认不发布新 artifact；现有 active artifact 可继续运行但 condition 标为 `Degraded`，避免供应链服务故障导致全站中断。
 
@@ -115,7 +123,7 @@ stdio 的 `public_config` 至少包含：
 }
 ```
 
-队列覆盖继续使用 `mcp_service.queue_max_depth/queue_timeout_ms`（NULL 分别取 50/30000），与 [01-data-model.md](01-data-model.md) 一致。所有数值由 Pydantic 和 policy engine 限定上下界；客户端不能提交 Docker 原生参数、mount、capability、seccomp 路径、container name 或 argv。
+队列覆盖继续使用 `mcp_service.queue_max_depth/queue_timeout_ms`（NULL 分别取 50/30000）；并发覆盖使用新增的 `mcp_service.stdio_instance_max/stdio_concurrency_per_instance`（NULL 分别取 1/1，即默认保持第一版最初的单实例单在途行为，需要更高吞吐必须显式调高），与 [01-data-model.md](01-data-model.md) 一致，详见第 8 章。所有数值由 Pydantic 和 policy engine 限定上下界；客户端不能提交 Docker 原生参数、mount、capability、seccomp 路径、container name 或 argv。
 
 公开 env key 只允许 `[A-Z_][A-Z0-9_]{0,63}`，值默认最多 4 KiB，并拒绝 `PATH/PYTHONPATH/PYTHONHOME/LD_*/DYLD_*/HOME/HOSTNAME/SSLKEYLOGFILE` 等平台保留项。私密 env 位于 `service_secret`，API 只返回 key 名和“已设置”状态。
 
@@ -206,13 +214,27 @@ bridge 只声明网关真正能代理的 client capability。第一版不向用�
 
 ## 8. 并发、背压、超时与取消
 
-### 8.1 队列模型
+### 8.1 实例池与并发模型
 
-`runner.py` 以 `(service_id, active_config_revision_id)` 为实例 key。第一版每个 key 最多一个 ready 实例、一个 FIFO 调用队列和一个 in-flight `tools/call`；启动/停止另有实例级锁。读 stdout、ping、取消和容器退出监听不受业务互斥锁阻塞。
+`runner.py` 以 `(service_id, active_config_revision_id)` 为**池 key**（不再是单实例 key）。池维护 `1..stdio_instance_max` 个相互独立、互不共享内存状态的 ready 实例（默认 `stdio_instance_max=1`，即退化为第一版最初的单实例行为）；每个实例内部允许最多 `stdio_concurrency_per_instance` 个并发在途 `tools/call`（默认 1）。池、实例和并发槽位都由显式配置控制，不存在隐式并发。
 
-请求在进入队列前已通过 [05-agent-gateway.md](05-agent-gateway.md) 的鉴权和两级限流。队列深度达到 `queue_max_depth` 时立即返回 503 `STDIO_QUEUE_FULL` 和有界 `Retry-After`；入队后超过 `queue_timeout_ms` 返回 503 `STDIO_QUEUE_TIMEOUT` 并原子移除。取消/客户端断开也必须从队列移除，不能让“幽灵请求”以后执行。
+**并发的实现基础**：单实例内的多并发不需要突破 MCP stdio 的 framing 规则——第 7.1 节的 pending map 本来就按 `request ID` 记录每个在途请求的 deadline/owner，JSON-RPC 响应天然带 `id` 用于匹配。因此”多个请求同时在途”只是把 pending map 从”至多一条记录”放宽为”至多 `stdio_concurrency_per_instance` 条记录”，`stdin` 写入依旧由同一个 writer task 串行化（写这件事必须串行，但写完不必等对应响应回来才能写下一条），`stdout` 读取和响应分发按 `id` 路由到对应的等待方。这不是新协议能力，是原有 framing 设计已经预留的扩展点。
 
-此模式选择了隔离和可预测性而非吞吐。一个 service 实例内的内存状态会在所有获准调用该 service 的 Agent 间共享；LiteMCP 不能把该状态视为用户会话隔离。需要调用方隔离的 server 必须把主体显式纳入 tool 参数并自行授权，或等待 **[后续]** 按安全主体分池。
+**调度顺序**：
+
+1. 请求先尝试路由到当前有空闲并发槽位的 ready 实例（最少在途优先）。
+2. 所有现有实例都满且实例数未达 `stdio_instance_max` 时，懒扩容一个新实例；并发触发扩容的多个请求通过实例级启动锁去重，不重复建容器（语义同原懒启动规则）。
+3. 实例数已达上限且全部满载时才真正入队；队列深度达到 `queue_max_depth` 时立即返回 503 `STDIO_QUEUE_FULL` 和有界 `Retry-After`；入队后超过 `queue_timeout_ms` 返回 503 `STDIO_QUEUE_TIMEOUT` 并原子移除。取消/客户端断开也必须从队列（或某实例的 pending map）移除，不能让”幽灵请求”以后执行。
+
+**缩容**：池整体空闲达到 §9 的 idle TTL 才整体 drain 到 0；池内”当前并发需求已明显低于实例数”时，多余的空闲实例可以各自独立提前 drain，不必等到整个池空闲，但至少保留 1 个 ready 实例直到真正整体空闲。
+
+**故障域**：单个实例崩溃（`CONTAINER_OOM`/`PROCESS_EXITED` 等，见第 11 章）只影响分配给它、尚未完成的在途请求，按错误表逻辑判定失败/进入受限重试白名单；不影响池内其他实例正在处理的请求——相对于”1 实例 1 并发”，这是明确的可用性改善（单点故障半径变小）。
+
+**用户代码责任边界**：`stdio_concurrency_per_instance > 1` 要求用户的 FastMCP 工具实现对并发调用安全（不依赖模块级可变全局状态、不假设同一时刻只有一次调用在执行）。网关只保证协议层面的正确分发与响应匹配，**不**校验、也不能校验用户代码是否可重入。第一版默认值保持 1（不改变最初的安全默认）；调高为 >1 时，创建/编辑向导必须显示这条风险提示，并要求 editor 二次确认。
+
+**资源预算**：池扩容后总资源占用 = `stdio_instance_max × 单实例资源限额`（§6.1 默认 0.5 CPU/256MiB/64 PIDs 等）。节点级聚合预算（§6.1 已要求但未给出公式）现在必须覆盖”某一 service 的实例池全部跑满 + 若干其他 service 同时跑满”这一更高的峰值场景：`Σ(每个 active stdio 服务的 stdio_instance_max × 单实例资源限额) ≤ 节点级预算`。管理面保存 `stdio_instance_max` 时应对照当前已知的其他 active stdio 服务做一次软性预算校验，超预算不阻止保存，但提示”当前节点预算下可能无法同时满足所有服务峰值”，实际强制门槛由启动自检和运行时资源限制兜底。
+
+一个 service 的一个实例仍然会在所有获准调用该 service 的 Agent 间共享（同一实例的内存状态不是用户会话隔离），池化并不改变这一点——多个实例之间没有共享内存，但同一个实例仍然可能被不同 Agent 的并发请求命中。需要调用方隔离的 server 必须把主体显式纳入 tool 参数并自行授权，或等待 **[后续]** 按安全主体分池（那是”按调用方拆分池”的进一步扩展，和本节的”按吞吐拆分池”是两回事，可以叠加但不互相替代）。**[决定]** 本节的实例池仍完全由单一 runner 进程管理，不引入跨 backend/worker 副本的分布式协调；`stdio_runner_replicas=1` 的约束（第 10 章）不变，多副本 fencing lease 仍是 **[后续]** 事项，解决的是不同问题（多个 backend 进程互斥接管同一 service），不是本节要解决的单进程内吞吐问题。
 
 ### 8.2 deadline 与取消
 
@@ -222,7 +244,7 @@ bridge 只声明网关真正能代理的 client capability。第一版不向用�
 
 1. 若请求尚在队列，移除并结束。
 2. 若已发送，发 `notifications/cancelled`，reason 只用稳定枚举，不包含秘密或原始参数；等待 `cancel_grace_ms`（默认 2 秒）。MCP 取消可能被 receiver 忽略，且取消后不应再等待普通响应，见 [MCP Cancellation](https://modelcontextprotocol.io/specification/2025-11-25/basic/utilities/cancellation)。
-3. 因第一版单 in-flight，grace 后仍无法证明工作停止时终止整个容器，失败所有 pending，重建成功后才处理下一请求；绝不在同一实例中假定超时任务已停止。
+3. grace 后仍无法证明该请求已停止时终止整个实例（容器），失败该实例上全部在途 pending 请求（不只是触发取消的这一个——同一实例上并发的其他 in-flight 请求无法单独确认存活状态，必须一并按失败处理），实例重建成功后池才恢复调度到它；绝不假定超时任务已停止就继续复用同一实例。池内其他实例不受影响，继续正常处理各自的在途请求。
 4. `initialize` 不发送取消；初始化超时直接执行关闭流程。task-augmented request 若未来启用，必须使用 `tasks/cancel` 而不是普通 cancellation notification。
 
 成功响应先验证 JSON-RPC、request ID、MCP result Schema 和字节上限，再返回 gateway。超限结果返回 `STDIO_RESULT_TOO_LARGE`，不得在 JSON 中静默截断；后续大结果应使用 MCP Resource/Task artifact，不在第一版私自改写 Tool result。
@@ -281,7 +303,7 @@ class StdioRunner:
     async def drain_revision(self, service_id: UUID, revision_id: UUID) -> None: ...
 ```
 
-`ServiceSnapshot` 必须在入队时冻结 service ID、generation、active revision/toolset、artifact digest、限制和 config revision 中的 egress policy 摘要；执行前再次确认 desired status 和 active revision 未变化。connector 不得自己切换 toolset；builder/runner 不得反向修改 desired config。
+`ServiceSnapshot` 必须在入队时冻结 service ID、generation、active revision/toolset、artifact digest、`stdio_instance_max/stdio_concurrency_per_instance`、限制和 config revision 中的 egress policy 摘要；执行前再次确认 desired status 和 active revision 未变化。并发/池大小配置是 metadata-only 更新（不产生新 generation、不创建新 revision，与 `queue_max_depth/queue_timeout_ms` 同类，见 [03-service-crud.md](03-service-crud.md)），因为它们只改变 runner 的编排参数，不改变已运行实例的镜像或业务配置；runner 通过独立的配置刷新通道感知变化，池按新配置逐步收敛（不强制立刻杀掉超编的旧实例，交由空闲回收自然收敛，避免配置调小时打断在途请求）。connector 不得自己切换 toolset；builder/runner 不得反向修改 desired config。
 
 多 backend 副本第一版若没有实现分布式 owner lease，部署必须强制 `stdio_runner_replicas=1`；不能依赖数据库轮询队列或“碰巧粘性路由”。**[后续]** 多副本使用具备 fencing token 的 lease，所有生命周期操作校验 owner epoch，防止两个 runner 同时接管同一 service。
 
@@ -301,7 +323,7 @@ class StdioRunner:
 
 返回给 Agent 的错误不得包含容器 ID、镜像 URI、宿主路径、stderr、tool 参数、env、堆栈或 Docker daemon 错误原文。管理端可查看脱敏 reason、时间、revision 和受权限保护的日志引用。重试只允许发生在“确认 tool 未开始执行”的启动/排队阶段；`tools/call` 一旦写入 stdin，网关不能自动重试非幂等工具。
 
-依赖故障的降级规则：Registry 暂时不可用但所需 digest 已在节点本地且校验匹配时可以启动；digest 不在本地则 fail-closed。Redis 不可用不改变本地单实例队列上限；若部署依赖 Redis owner lease，则禁止新接管，现有 lease 到期后 drain。可观测系统故障不能阻塞协议数据面，但审计写入仍按 [01-data-model.md](01-data-model.md) 的 outbox 策略处理。
+依赖故障的降级规则：Registry 暂时不可用但所需 digest 已在节点本地且校验匹配时可以启动；digest 不在本地则 fail-closed。Redis 不可用不改变本地实例池的队列/并发上限；若部署依赖 Redis owner lease，则禁止新接管，现有 lease 到期后 drain。可观测系统故障不能阻塞协议数据面，但审计写入仍按 [01-data-model.md](01-data-model.md) 的 outbox 策略处理。
 
 ## 12. 可观测性与审计
 
@@ -311,7 +333,8 @@ class StdioRunner:
 
 - build/probe success、duration、queue、timeout、resource failure、scan denial；
 - running/starting/backoff/quarantined 实例数，startup/initialize/ping/stop latency，restart/OOM/PID-limit 次数；
-- per-service queue depth、queue wait、in-flight、queue reject、call duration/cancel/timeout；
+- per-service 实例池大小（当前/`stdio_instance_max`）与按实例的并发占用（当前在途/`stdio_concurrency_per_instance`），用于判断"该加大并发上限"还是"该加大池上限"；
+- per-service queue depth、queue wait、in-flight（池级汇总）、queue reject、call duration/cancel/timeout；
 - stdout protocol error/oversize、stderr dropped bytes、result oversize、executor queue depth；
 - image/cache/temporary storage bytes、GC result、egress allow/deny/bytes。
 
@@ -323,7 +346,7 @@ service ID 是受控规模标签；revision、instance、request、container、t
 
 - ZIP validator 用 property-based/fuzz 覆盖 `../`、绝对/UNC/盘符、混合分隔符、Unicode 规范化重名、NUL、symlink/hardlink、central/local header 不一致、加密条目、超大 size、压缩比和中途磁盘写失败。
 - framing parser 用随机 chunk 边界覆盖 UTF-8 拆分、CRLF、超长无换行、非法 JSON、重复/未知 ID、notification 混排、stdout 日志污染和深层 JSON；断言内存始终有界。
-- runner 的状态机做模型测试：并发 lazy start 只创建一个实例；队列 FIFO/满/超时/取消无泄漏；deadline/cancel race 不双重完成；revision drain 不接收旧请求；restart budget 不产生风暴。
+- runner 的状态机做模型测试：并发 lazy start 在池未满时按需扩容且不重复建容器、达到 `stdio_instance_max` 后才排队；同一实例内多个并发 `tools/call` 的 request ID 匹配在乱序响应下依然正确、互不串号；单实例崩溃只失败该实例上的在途请求，池内其他实例不受影响；队列 FIFO/满/超时/取消无泄漏；deadline/cancel race 不双重完成；revision drain 不接收旧请求；restart budget 不产生风暴；池收缩时多余空闲实例独立 drain，不打断其他实例的在途请求。
 - secret redaction 对原值、header、URL 编码和异常链做回归；任何 snapshot/log fixture 不含 canary secret。
 
 ### 13.2 集成与故障注入
@@ -358,6 +381,10 @@ service ID 是受控规模标签；revision、instance、request、container、t
 |---|---:|---|
 | `STDIO_QUEUE_MAX_DEPTH` | 50 | service 可向 policy 范围内覆盖 |
 | `STDIO_QUEUE_TIMEOUT_MS` | 30000 | 与 `mcp_service.queue_timeout_ms` 同单位 |
+| `STDIO_INSTANCE_MAX_DEFAULT` | 1 | service 未配置 `stdio_instance_max` 时的池大小；保持最初的安全默认 |
+| `STDIO_INSTANCE_MAX_CEILING` | 8 | 平台硬上限，`stdio_instance_max` 不能超过，超过节点聚合预算需先扩容再放开 |
+| `STDIO_CONCURRENCY_PER_INSTANCE_DEFAULT` | 1 | service 未配置 `stdio_concurrency_per_instance` 时的默认值 |
+| `STDIO_CONCURRENCY_PER_INSTANCE_CEILING` | 8 | 平台硬上限；调高前 editor 必须确认用户代码并发安全（第 8.1 节） |
 | `STDIO_STARTUP_TIMEOUT_MS` | 15000 | initialize 前总 deadline |
 | `STDIO_CALL_TIMEOUT_MS` | 60000 | service 可覆盖；硬上限 300000 |
 | `STDIO_CANCEL_GRACE_MS` | 2000 | 到期终止实例 |
