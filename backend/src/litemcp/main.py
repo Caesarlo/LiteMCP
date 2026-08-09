@@ -31,12 +31,14 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from litemcp.core.config import get_settings
+from litemcp.correlation import CorrelationIdMiddleware
 
 # Short probe timeout so a stalled dependency fails fast instead of hanging
 # /readyz.
 _PROBE_TIMEOUT = 2.0
 
 app = FastAPI(title="LiteMCP")
+app.add_middleware(CorrelationIdMiddleware)
 
 
 @app.get("/livez")
