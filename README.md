@@ -2,9 +2,9 @@
 
 # LiteMCP
 
-### Enterprise-grade MCP governance. Zero hand-written MCP servers for the APIs you already have.
+### A unified MCP gateway and governance platform for HTTP APIs, remote MCP servers, and custom code packages.
 
-Stop writing a new MCP server for every HTTP API. Describe it once, and LiteMCP converts, governs, and gateways it — alongside MCP servers you pass through and custom code packages you upload — from one open-source control plane.
+LiteMCP aims to bring existing HTTP APIs, remote MCP servers, and FastMCP/STDIO packages behind one control plane, reducing the need to build and maintain a dedicated MCP server for every API.
 
 English | [简体中文](README.zh-CN.md)
 
@@ -19,38 +19,52 @@ English | [简体中文](README.zh-CN.md)
 </div>
 
 > [!IMPORTANT]
-> LiteMCP is in active development. The architecture and product experience are well-defined, while the runtime, connectors, and management console are still being implemented. See [Project status](#project-status) for what is available today.
+> **Current state: early implementation scaffold.** The repository currently contains a basic FastAPI application, liveness/readiness endpoints, and a React/HeroUI frontend template. The MCP gateway, connectors, authentication and authorization, atomic publication, sandbox runtime, and complete deployment stack are not yet implemented. LiteMCP is not ready for production use.
+
+## Project status
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| Architecture and security design | **Internally reviewed** | Design documents cover the control/data/build planes, data model, authentication, sandbox, and verification strategy; implementation and production security validation remain pending |
+| Product and UI/UX design | **Internally reviewed** | Information architecture and core workflows have a documented review baseline |
+| Backend foundation | **In progress** | FastAPI package and liveness/readiness endpoints exist |
+| Management console | **Scaffold only** | The current frontend is the original React/HeroUI template, not a LiteMCP product UI |
+| HTTP API connector | **Planned** | Intended as the first end-to-end service slice |
+| Remote MCP connector | **Planned** | Intended to follow the shared gateway and publication foundation |
+| STDIO sandbox | **Planned** | Intended to cover isolated build, probe, runtime, and cleanup lifecycles |
+
+The architecture documents describe the intended system, not functionality already available in the repository.
 
 ## One gateway for every MCP service
 
 MCP services often arrive in different shapes: an existing HTTP API, a remote MCP server, or a local STDIO package. Each brings its own deployment model, credentials, lifecycle, and operational risks.
 
-LiteMCP provides one place to connect and govern them. Services are validated and published as immutable toolsets, then exposed to agents through a consistent Streamable HTTP endpoint:
+LiteMCP is designed to provide one place to connect and govern them. In the target system, services will be validated and published as immutable toolsets, then exposed to agents through a consistent Streamable HTTP endpoint:
 
 ```text
 /mcp/{service_id}
 ```
 
-Agents get one stable interface. Platform teams get controlled releases, access management, and a clear view of what is actually serving traffic.
+The intended result is one stable interface for agents, with controlled releases, access management, and clear runtime state for platform teams.
 
-## Why LiteMCP
+## Design goals
 
-- **Enterprise-grade governance, one compose stack away** — RBAC, audit trails, secret rotation, and atomic publish/rollback across dual-dialect PostgreSQL/MySQL, backed by a single `docker compose` (database, Redis, backend, worker, frontend). The questions a security review asks are already answered; you don't stand up a platform to get there.
-- **One gateway instead of N hand-written MCP servers** — stop writing and maintaining a bespoke MCP server for every HTTP API. Describe a Tool schema and an HTTP binding once; LiteMCP owns protocol conversion, validation, credential injection, SSRF protection, and invocation for every service behind it.
-- **Pass through existing MCP servers, LiteMCP owns the security layer** — connect a remote MCP server as-is; LiteMCP centralizes agent authentication, rate limiting, and audit logging in front of it, so the downstream server never has to implement its own gateway security.
-- **Run custom code packages** — upload a FastMCP source package and LiteMCP builds, probes, and runs it inside a sandboxed, resource-bounded container. No image pipeline or runtime to maintain yourself.
+- **Governance designed for enterprise requirements** — the target architecture includes RBAC, audit trails, secret rotation, atomic publish/rollback, and PostgreSQL/MySQL support, with a planned Compose-based local deployment stack.
+- **One gateway instead of N dedicated MCP servers** — define a Tool schema and deterministic HTTP binding once; LiteMCP is intended to handle protocol conversion, validation, credential injection, SSRF protection, and invocation.
+- **A shared security layer for remote MCP servers** — the planned passthrough connector centralizes agent authentication, rate limiting, and audit logging in front of downstream servers.
+- **Managed custom code packages** — the planned STDIO runtime will build, probe, and run FastMCP source packages in sandboxed, resource-bounded containers.
 
 ## Connect any service shape
 
-| Service type | You provide | LiteMCP manages |
+| Planned service type | You provide | LiteMCP is intended to manage |
 | --- | --- | --- |
 | **HTTP API** | MCP Tool schemas and deterministic HTTP bindings | Validation, credential injection, SSRF controls, invocation, and response validation |
 | **Remote MCP (passthrough)** | A remote MCP server endpoint and credentials | Tool discovery, synchronization, proxying, **agent auth, rate limiting, and audit**, circuit breaking, and revision switching |
 | **Custom code package (STDIO / FastMCP)** | A source package | Isolated build, MCP probing, sandboxed execution, and runtime lifecycle |
 
-> These connectors are part of the approved architecture and are not yet available in the current scaffold. Their implementation order is tracked in the [roadmap](#roadmap).
+> All three connectors are design targets and are not available in the current scaffold. Their implementation order is tracked in the [roadmap](#roadmap).
 
-## From service to agent
+## Intended service lifecycle
 
 ```mermaid
 flowchart LR
@@ -61,35 +75,35 @@ flowchart LR
     E --> F["Observe and operate"]
 ```
 
-LiteMCP keeps configuration, build artifacts, and toolsets immutable. A candidate toolset becomes active only after validation succeeds. A failed build or synchronization never replaces the version currently serving agents, and retained versions can be rolled back safely.
+The design keeps configuration, build artifacts, and toolsets immutable. A candidate toolset becomes active only after validation succeeds. Failed builds or synchronizations must not replace the version currently serving agents, and retained versions are intended to support safe rollback.
 
-## Built as a product, not a protocol wrapper
+## Planned product capabilities
 
 ### Unified service catalog
 
-Discover HTTP API, remote MCP, and STDIO services from one high-density operations console. Filter by ownership, type, authentication mode, and real runtime health.
+The planned operations console will bring HTTP API, remote MCP, and STDIO services into one catalog, with filters for ownership, type, authentication mode, and observed runtime health.
 
 ### Atomic tool publishing
 
-Stage and validate complete toolsets before switching the active pointer. Agents see either the previous complete release or the next one—never a partially updated set of tools.
+Complete toolsets will be staged and validated before the active pointer changes, so agents see either the previous complete release or the next one—never a partially updated set of tools.
 
 ### Stable MCP gateway
 
-Expose every downstream through the same MCP Streamable HTTP surface while preserving official MCP lifecycle, Tool schema, metadata, and error semantics.
+Every downstream is intended to use the same MCP Streamable HTTP surface while preserving official MCP lifecycle, Tool schema, metadata, and error semantics.
 
 ### Secure agent access
 
-Manage per-service API keys, object-level permissions, rate limits, secret redaction, and auditable lifecycle actions without leaking downstream credentials to agents.
+The planned access layer includes per-service API keys, object-level permissions, rate limits, secret redaction, and auditable lifecycle actions without exposing downstream credentials to agents.
 
 ### Sandboxed STDIO runtime
 
-Separate package validation, image building, probing, and execution. STDIO workloads run inside hardened, resource-bounded containers rather than the control-plane process.
+The target runtime separates package validation, image building, probing, and execution. STDIO workloads are intended to run inside hardened, resource-bounded containers rather than the control-plane process.
 
 ### Operations you can trust
 
-Keep desired state separate from observed runtime state. Correlated logs, metrics, traces, audit events, health conditions, and build or sync progress make failures diagnosable.
+The operations design separates desired state from observed runtime state and calls for correlated logs, metrics, traces, audit events, health conditions, and build or synchronization progress.
 
-## Architecture
+## Target architecture
 
 ```mermaid
 flowchart LR
@@ -108,23 +122,9 @@ flowchart LR
     GW --> REDIS[("Redis")]
 ```
 
-LiteMCP separates the management control plane, agent data plane, and asynchronous build/synchronization plane. The backend is designed around FastAPI and the official MCP Python SDK; the management console uses React, TypeScript, Vite, HeroUI, and Tailwind CSS.
+The target architecture separates the management control plane, agent data plane, and asynchronous build/synchronization plane. The backend is designed around FastAPI and the official MCP Python SDK; the planned management console uses React, TypeScript, Vite, HeroUI, and Tailwind CSS.
 
 Read the [architecture overview](docs/architecture/00-overview.md) for the complete domain model, security boundaries, publication invariants, and deployment design.
-
-## Project status
-
-| Area | Status | Notes |
-| --- | --- | --- |
-| Architecture and security model | **Reviewed** | Control/data/build planes, data model, authentication, sandbox, and verification plans are documented |
-| Product and UI/UX design | **Reviewed** | Information architecture and core workflows have an approved review baseline |
-| Backend foundation | **In progress** | FastAPI package and liveness/readiness endpoints exist |
-| Management console | **In progress** | React/HeroUI application scaffold exists; product screens are not implemented yet |
-| HTTP API connector | **Planned** | First end-to-end service slice |
-| Remote MCP connector | **Planned** | Follows the shared gateway and publication foundation |
-| STDIO sandbox | **Planned** | Isolated build, probe, runtime, and cleanup lifecycle |
-
-The repository currently represents an early implementation scaffold backed by a detailed, reviewed product and architecture plan. It is not ready for production use.
 
 ## Quick start
 
@@ -155,7 +155,7 @@ npm install
 npm run dev
 ```
 
-> The management UI is currently a frontend scaffold. It is not yet connected to the planned service management APIs.
+> The frontend currently renders the original HeroUI/Vite starter template, not a LiteMCP management console. It only verifies that the frontend toolchain runs and is not connected to service management APIs.
 
 ## Roadmap
 
@@ -186,7 +186,7 @@ Detailed milestones and acceptance gates live in the [implementation plan](docs/
 
 ## Contributing
 
-LiteMCP is not yet accepting production deployments, but architecture reviews, issue reports, and implementation contributions are welcome. Before implementing a major capability, review the relevant architecture document and its verification requirements so the change preserves the project's security and publication invariants.
+LiteMCP is not ready for production deployments, but architecture reviews, issue reports, and implementation contributions are welcome. Before implementing a major capability, review the relevant architecture document and its verification requirements so the change preserves the intended security and publication invariants.
 
 ## License
 
