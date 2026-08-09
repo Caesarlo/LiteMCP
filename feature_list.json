@@ -523,7 +523,7 @@
       "area": "backend",
       "title": "建立关联 ID 中间件",
       "behavior": "每个管理和网关请求都获得可传播的 request_id/correlation_id。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -532,14 +532,37 @@
           "expected": "请求头、响应头和上下文传播测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/middleware/test_correlation.py -q",
+          "result": "16 passed across three classes. Ingress validation (07-observability L75): valid X-Request-ID accepted and echoed, 128-byte boundary accepted, 6 invalid variants (space, /, $, !, 129 bytes, empty) and absent header all regenerated to a valid ID matching [A-Za-z0-9._-]+ 1..128 bytes. Response echo (05-agent-gateway L408): probe, /livez, and 404 responses all carry X-Request-Id equal to the used request_id. Context propagation (07 L212-213/L227): handler reads request.state.request_id via test-only probe route, equal to the echoed header value; per-request independence (L80). Written by an isolated test-writer subagent from behavior + architecture docs; RED confirmed in-session (16 failed on 'State' object has no attribute 'request_id' / missing X-Request-Id). Windows-equivalent of declared uv run pytest.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 39 passed (17 config + 3 livez + 3 readyz + 16 correlation), no regression. ruff clean. mypy clean (6 source files).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "exits 0 (11 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/tests/middleware/test_correlation.py",
+          "backend/src/litemcp/correlation.py",
+          "backend/src/litemcp/main.py"
+        ],
         "commits": []
       },
       "blocker": null,

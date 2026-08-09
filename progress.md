@@ -18,7 +18,7 @@
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend test leg lands with `M0-FE-001`); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
 - Current blocker: None.
-- Last passing feature: `M0-BE-002` (backend `/readyz` readiness contract; `tests/api/test_health.py -k readyz` — 3 contract tests pin HTTP 200 + `{"status":"ready","components":[{name,status,reason},...]}` when both `probe_database()`/`probe_redis()` are healthy and HTTP 503 + `{"status":"not_ready"}` when either is down, with name/status/reason components and no DSN/host/stack leakage; RED observed in-session (missing probe seam), isolated TDD split exercised end-to-end; implementer added the two sync module-level fail-closed short-timeout DB/Redis probes to `main.py`, `/livez` unchanged. Previous: `M0-BE-001` `/livez` contract, 3 tests pinned HTTP 200 + `application/json` + stable `{"status":"ok"}` payload).
+- Last passing feature: `M0-BE-003` (backend correlation-id middleware; `tests/middleware/test_correlation.py` — 16 tests pin ingress `X-Request-ID` validation `[A-Za-z0-9._-]+` 1–128 bytes with regeneration on invalid/absent, uniform `X-Request-Id` response echo incl. 404, and context propagation via `request.state.request_id`; RED observed in-session, isolated TDD split exercised end-to-end; implementer added `correlation.py` `CorrelationIdMiddleware` mounted in `main.py`, `/livez`/`/readyz` unchanged. Previous: `M0-BE-002` `/readyz` 3 contract tests + real fail-closed DB/Redis probes; `M0-BE-001` `/livez` 3 contract tests).
 
 ## Session Log
 
@@ -357,3 +357,33 @@
 - Commits: `a67c10f` `test(api): add readyz contract gate test (M0-BE-002)`; `4d3a50b` `feat(api): implement real /readyz dependency probes (M0-BE-002)`; `5e943bd` `feat(api): mark M0-BE-002 readyz contract passing with evidence (M0-BE-002)`.
 - Decision: Real DB/Redis probes are deliberately fail-closed with short timeouts, and reason codes carry only `ok`/`connection_failed` (no DSN/host) per 07-observability L420. The probe seam (`probe_database`/`probe_redis`) is the durable contract that M1+ code will reuse once the real SQLAlchemy session factory (M1-DB-001) exists. Redis "rate-limit-only → degraded" semantics (L419) are deferred to when Redis rate-limiting exists (M4-LIMIT-*), out of this feature's scope.
 - Next action: `M0-BE-003` (关联 ID 中间件 `tests/middleware/test_correlation.py`, priority 16), unchanged from the plan.
+
+### Session 010 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-BE-003` (关联 ID 中间件) via the AGENTS.md isolated TDD workflow: test-writer and implementer dispatched as separate subagents with isolated context, RED/GREEN verified by the controlling session.
+
+#### Checkpoint 25 · M0-BE-003 activated
+
+- Feature: `M0-BE-003`
+- Status change: `not_started` → `in_progress`.
+- Result: Baseline confirmed. `backend/tests/` has no `middleware/` directory (the feature's declared verification `pytest tests/middleware/test_correlation.py` has no test to run yet); `backend/src/litemcp/main.py` has no correlation middleware. Contract from `07-observability.md`: L75 (`request_id` — ingress validates `X-Request-ID`: only `[A-Za-z0-9._-]`, 1–128 bytes; invalid values are regenerated; response echoes the ID), L80 (HTTP ingress always generates an independent `request_id`), L227 (log correlation relies on ID fields rather than string interpolation); and `05-agent-gateway.md` L408 (responses uniformly include `X-Request-Id`). `correlation_id` (L76) is a server-generated stable ID for one business workflow (build/sync/GC), distinct from the per-request `request_id`.
+- Files changed: `feature_list.json` (status), `progress.md`.
+- Verification: `node scripts/validate-feature-list.js` exits 0 (1 in_progress, 11 passing, 0 blocked).
+- Next action: Dispatch the isolated test-writer subagent to write `tests/middleware/test_correlation.py` from the feature's behavior/verification/source_refs alone.
+
+#### Checkpoint 26 · M0-BE-003 implemented and passed its gate
+
+- Feature: `M0-BE-003`
+- Status change: `in_progress` → `passing` (same session).
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer subagent (isolated context, forbidden from reading `backend/src/`) created `backend/tests/middleware/test_correlation.py` — 16 tests across three classes pinning the docs/07 L75/L80 + docs/05 L408 contract: (a) ingress validation (valid `X-Request-ID` accepted/echoed, 128-byte boundary, 6 invalid variants + absent regenerated to a valid ID), (b) uniform response echo on probe/`/livez`/404, (c) context propagation via `request.state.request_id` observed through a test-only probe route registered on the imported app. The probe route is test scaffolding entirely inside the test file.
+  2. Controlling-session RED run: `pytest tests/middleware/test_correlation.py` → 16 failed, all on `AttributeError: 'State' object has no attribute 'request_id'` / absent `X-Request-Id` — the missing-middleware behavior, not a typo or setup issue.
+  3. Fresh implementer subagent (test file + behavior text only) added `backend/src/litemcp/correlation.py` (`CorrelationIdMiddleware`, Starlette `BaseHTTPMiddleware`): validates inbound `X-Request-ID` (`[A-Za-z0-9._-]+`, 1–128 bytes), regenerates on absent/invalid via `req_` + `secrets.token_hex(16)`, sets `request.state.request_id`, echoes `X-Request-Id` on every response; mounted in `main.py` via `app.add_middleware(...)`. `/livez` and `/readyz` untouched.
+- Files changed: `backend/tests/middleware/test_correlation.py` (test-writer), `backend/src/litemcp/correlation.py` (new, implementer), `backend/src/litemcp/main.py` (implementer), `feature_list.json` (status → passing + evidence + implementation files), `progress.md`.
+- Verification: `pytest tests/middleware/test_correlation.py` → 16 passed (GREEN; RED confirmed earlier). Full suite `pytest -q` → 39 passed (17 config + 3 livez + 3 readyz + 16 correlation), no regression. `ruff check src tests` clean. `mypy src` clean (6 source files). `node scripts/validate-feature-list.js` exits 0 (11 passing, 1 in_progress before transition).
+- Evidence: recorded on `M0-BE-003` in `feature_list.json`.
+- Commits: test + implementer + state — filled below after commit.
+- Decision: The middleware is a pure per-request concern (no config/deps); `request.state.request_id` is the propagation channel per the test contract, and a contextvar/accessor layer is not needed at M0. The `correlation_id` concept (07 L76, server-generated stable workflow ID) is intentionally not implemented here — it attaches to async build/sync/GC workflows (M3), not per-request HTTP handling; recorded so no later feature silently reuses `request_id` as a workflow ID.
+- Next action: `M0-FE-001` (前端测试脚手架 `cd frontend && npm run test -- --run`, priority 17) — the first frontend feature; its test leg was explicitly deferred from `make test` (M0-CMD-001) until now.
