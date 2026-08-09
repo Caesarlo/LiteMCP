@@ -304,6 +304,8 @@ CRUD 页面依赖的只读/长任务子资源使用下列规范路径，避免�
   "agent_auth_mode": "api_key",
   "queue_max_depth": 50,
   "queue_timeout_ms": 30000,
+  "stdio_instance_max": 1,
+  "stdio_concurrency_per_instance": 1,
   "config": {
     "schema_version": 1,
     "entrypoint": "server.py:mcp",
@@ -332,7 +334,7 @@ CRUD 页面依赖的只读/长任务子资源使用下列规范路径，避免�
 
 `stdio` 不接受 `tools` 字段。创建 service 之前尚不存在可归属的 `service_artifact`，因此请求引用的是短期 `source_upload_id`，不是 artifact ID：upload session 必须绑定当前 actor、用途、摘要、大小和 TTL，且只能消费一次；创建事务先插入 service，再把已 finalize 的 upload 固化为归属该 service/revision 的不可变 `service_artifact`。更新既可引用新 upload，也可显式复用属于同一 service 且仍 available 的旧 source artifact；两种输入在 Schema 中互斥，绝不能引用任意 object key。代码包上传 API 可独立于 JSON CRUD，以支持本地 StorageBackend 与 S3/MinIO 直传；包格式、落盘和安全校验见 [04-stdio-sandbox.md](04-stdio-sandbox.md) 第 4 节。
 
-`queue_max_depth/queue_timeout_ms` 只允许 stdio；其他类型提交返回 `FIELD_NOT_ALLOWED_FOR_SERVICE_TYPE`。出网默认 `none`；增加 allowlist 需要 editor 明确确认并审计。提交后返回 202 + `build_run` operation。只有包验证、隔离构建、临时启动、MCP initialize/tools/list、安全与 Schema 校验全部成功，worker 才能原子切换 active revision/toolset。旧 generation 的构建结果只能标为 superseded。
+`queue_max_depth/queue_timeout_ms/stdio_instance_max/stdio_concurrency_per_instance` 只允许 stdio；其他类型提交返回 `FIELD_NOT_ALLOWED_FOR_SERVICE_TYPE`。出网默认 `none`；增加 allowlist 需要 editor 明确确认并审计。提交后返回 202 + `build_run` operation。只有包验证、隔离构建、临时启动、MCP initialize/tools/list、安全与 Schema 校验全部成功，worker 才能原子切换 active revision/toolset。旧 generation 的构建结果只能标为 superseded。
 
 ## 5. CRUD 事务和状态流
 
@@ -395,6 +397,7 @@ sequenceDiagram
 |---|---:|---|---|
 | name/description/tags/icon | 不变 | 不创建 config revision | 200 |
 | team_id（转移团队） | 不变 | 不创建；要求提交者是来源/目标 team 的 admin 或全局 admin | 200 |
+| stdio_instance_max/stdio_concurrency_per_instance | 不变 | 不创建；纯 runner 编排参数，不改变已运行实例的镜像/业务配置，见 [04-stdio-sandbox.md](04-stdio-sandbox.md) 8.1 | 200 |
 | desired_status | 不变 | 不创建；走专用 PATCH 更清晰 | 200 |
 | agent auth、rate limit、stdio queue 或期望配置 | +1 | 创建 config revision；按类型验证/构建/同步 | http_api 200；异步类型 202 |
 | http_api tools | +1 | 新 toolset 全量验证并与 config 原子发布 | 200；失败整个请求 422/409，旧 active 不变 |
