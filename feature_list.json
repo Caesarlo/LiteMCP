@@ -694,7 +694,7 @@
       "area": "engineering",
       "title": "建立基础 CI 门禁",
       "behavior": "CI 执行后端 lint/type/unit 与前端 lint/type/unit/build。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-CMD-001",
         "M0-FE-001"
@@ -706,18 +706,43 @@
           "expected": "本地等价快速门禁全部通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "node --test scripts/validate-ci-fast.test.js",
+          "result": "RED confirmed in controlling session first (3 failed: ci-fast target missing from make help, make errors, no leg output). After implementer: 3/3 pass. Gate checks: (1) make help lists ci-fast; (2) make ci-fast exits 0; (3) make ci-fast stdout contains all seven exact leg markers (backend lint/type/unit + frontend lint/type/unit/build) — the honesty guard against a false-pass stub.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "make ci-fast",
+          "result": "exit 0, all seven legs genuinely ran: backend ruff 'All checks passed!', backend mypy 'Success: no issues found in 6 source files', backend pytest 43 passed, frontend eslint clean, frontend tsc (noEmit, tsconfig.json) clean, frontend vitest 7 passed, frontend vite build clean. Type leg (npx tsc) and build leg (npx vite build) are distinct and non-redundant. Regenerates frontend/dist as a normal build artifact; dist is gitignored (no working-tree noise).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node --test scripts/validate-make-help.test.js; node scripts/validate-feature-list.js",
+          "result": "make-help gate 7/7 pass (M0-CMD-001's six unified commands and db-matrix refusal semantics unchanged). feature-list validator exits 0 (14 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "Makefile",
+          "scripts/validate-ci-fast.test.js"
+        ],
+        "commits": [
+          "6a1b7c1",
+          "c007dc0"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手仅依据 behavior/verification/source_refs 编写 scripts/validate-ci-fast.test.js（3 个 node:test 用例，含 7 条腿 marker 诚实性检查），实现者独立在根 Makefile 新增 ci-fast 目标（7 条腿各前置 @echo 精确 marker，未改动任何既有目标）。make ci-fast 是 08-implementation-plan.md L93/L327-335 PR 快速门禁的本地等价物；更广的 CI 组成（文档链接检查、secret scan、依赖/许可证审查）与 GitHub Actions workflow 不在本 feature 声明范围（验证命令是本地 make ci-fast），记录为后续候选。前端 lint 复用现有 eslint --fix 脚本，与 make lint 一致。"
     },
     {
       "id": "M0-ADR-001",
