@@ -387,3 +387,33 @@
 - Commits: `7a81a30` `test(api): add correlation-id middleware contract tests (M0-BE-003)`; `4f8511b` `feat(api): add correlation-id middleware (M0-BE-003)`; `079aaa5` `feat(api): mark M0-BE-003 correlation middleware passing with evidence (M0-BE-003)`.
 - Decision: The middleware is a pure per-request concern (no config/deps); `request.state.request_id` is the propagation channel per the test contract, and a contextvar/accessor layer is not needed at M0. The `correlation_id` concept (07 L76, server-generated stable workflow ID) is intentionally not implemented here — it attaches to async build/sync/GC workflows (M3), not per-request HTTP handling; recorded so no later feature silently reuses `request_id` as a workflow ID.
 - Next action: `M0-FE-001` (前端测试脚手架 `cd frontend && npm run test -- --run`, priority 17) — the first frontend feature; its test leg was explicitly deferred from `make test` (M0-CMD-001) until now.
+
+### Session 011 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-FE-001` (前端测试脚手架) via the AGENTS.md isolated TDD workflow: test-writer and implementer dispatched as separate subagents with isolated context, RED/GREEN verified by the controlling session.
+
+#### Checkpoint 27 · M0-FE-001 activated
+
+- Feature: `M0-FE-001`
+- Status change: `not_started` → `in_progress`.
+- Result: Baseline confirmed. Frontend has NO test infrastructure: `package.json` has no `test` script (only dev/build/lint/preview), no vitest config in `vite.config.ts`, no test files anywhere, and no RTL/MSW deps. Scaffold components are static (no fetch/axios/useQuery in `frontend/src/`), so MSW "basic config" must be proven via interception inside a test rather than a real page fetch. Architecture mandate from `06-frontend.md` L55: 测试使用 Vitest、React Testing Library、MSW、Playwright 和 axe-core（或等价可自动化无障碍检查器）；M0-FE-001 scope is the first three + a minimal component test (Playwright/axe land with later frontend features). Version compatibility confirmed: installed vite 8.0.16; `vitest@4.1.10` peer-accepts `^6.0.0 || ^7.0.0 || ^8.0.0`, so the implementer will pin vitest@^4 + jsdom + RTL + MSW@^2.
+- Files changed: `feature_list.json` (status).
+- Verification: `node scripts/validate-feature-list.js` exits 0 (1 in_progress, 12 passing, 0 blocked).
+- Next action: Dispatch the isolated test-writer subagent to write the minimal component test(s) from the feature's behavior/verification/source_refs alone.
+
+#### Checkpoint 28 · M0-FE-001 implemented and passed its gate
+
+- Feature: `M0-FE-001`
+- Status change: `in_progress` → `passing` (same session).
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer subagent (isolated context: only `behavior`/`verification`/source_refs; allowed to read existing frontend components to pick a real subject) produced `frontend/src/test/navbar.test.tsx` (real `Navbar` RTL test: brand, 5 top-level nav links with href, Sponsor button, Search placeholder, mobile toggle open/close via `aria-expanded`, with a jsdom `window.matchMedia` stand-in for HeroUI's useTheme) and `frontend/src/test/msw.test.tsx` (real MSW 2.x interception proof via a test-only fetch component: mocked data renders, per-test `server.use()` override, unhandled requests blocked under `onUnhandledRequest:'error'`). It reported only the two file paths.
+  2. Controlling-session RED run: `npm run test -- --run` → `npm error Missing script: "test"` — the absent test scaffold, not a typo or setup issue.
+  3. Fresh implementer subagent (test file paths + behavior text only, no test-writer reasoning) set up the stack without touching test assertions: `npm install -D vitest@^4 jsdom @testing-library/react @testing-library/dom @testing-library/jest-dom@^6 msw@^2` (jest-dom re-pinned to ^6.10.0 after bare install pulled v7), added `"test": "vitest"` to `frontend/package.json`, and extended `vite.config.ts` (defineConfig from `vitest/config`, `test: { environment: "jsdom" }`) keeping `resolve.tsconfigPaths` so the `@/` alias is inherited. Reported 7/7 GREEN (GREEN re-verified by the controlling session: 2 files / 7 tests, exit 0).
+- Files changed: `frontend/src/test/navbar.test.tsx`, `frontend/src/test/msw.test.tsx` (test-writer), `frontend/package.json`, `frontend/package-lock.json`, `frontend/vite.config.ts` (implementer), `feature_list.json` (status → passing + evidence), `progress.md`.
+- Verification: declared `cd frontend && npm run test -- --run` → 2 files / 7 tests passed. Regression: `npm run build` (tsc + vite) exit 0 (test files compile under strict TS), `npm run lint` exit 0 (only prettier reformats on test files, assertions unchanged), `node scripts/validate-feature-list.js` exits 0 (12 passing, 1 in_progress before transition). Version-compat: vite 8.0.16 (unchanged) + vitest 4.1.10 (peer-accepts vite ^8) + jsdom 29.1.1 + RTL 16.3.2 + jest-dom 6.10.0 + msw 2.15.0.
+- Evidence: recorded on `M0-FE-001` in `feature_list.json`.
+- Commits: `f34760a` `test(frontend): add vitest/RTL/MSW scaffold tests (M0-FE-001)`; `4a9f912` `feat(frontend): add vitest config and dev deps for test scaffold (M0-FE-001)`; state commit follows.
+- Decision: This completes the frontend test leg that `make test` (M0-CMD-001) deliberately deferred; `make test` now covers backend pytest + the new `npm run test -- --run` frontend leg when it is wired in (make test currently still prints the deferral note — updating the root Makefile test target is a candidate narrow change but out of this feature's declared verification). Playwright + axe-core (06-frontend.md L55) land with later frontend features, not M0.
+- Next action: `M0-CONTRACT-001` (OpenAPI 快照门禁 `make test-openapi`, priority 18, depends on passing `M0-BE-001`) — the next M0 feature after M0-FE-001 completes.

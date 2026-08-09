@@ -578,7 +578,7 @@
       "area": "frontend",
       "title": "建立前端测试脚手架",
       "behavior": "前端具备 Vitest、RTL 和 MSW 基础配置，并可运行最小组件测试。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -587,18 +587,46 @@
           "expected": "前端测试命令成功"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd frontend && npm run test -- --run",
+          "result": "RED confirmed in controlling session before implementation: npm error Missing script: \"test\" (the absent test scaffold). After implementer: 2 test files / 7 tests passed (vitest 4.1.10, jsdom environment). navbar.test.tsx renders the real existing Navbar component via RTL (brand, 5 top-level nav links with href, Sponsor button, Search placeholder, mobile menu toggle with aria-expanded open/close) with a jsdom matchMedia stand-in; msw.test.tsx proves real MSW 2.x interception (setupServer/http/HttpResponse) through a test-only fetch component: mocked data renders, per-test server.use() override works, and requests matching no handler are blocked under onUnhandledRequest:'error'. Windows node/npm.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd frontend && npm run build; npm run lint",
+          "result": "build (tsc && vite build) exit 0 — test files under src/ compile under strict TS, production bundle built. lint (eslint --fix) exit 0 — only prettier line-wrapping reformats on the two test files, assertions/names/structure unchanged. Installed versions: vite 8.0.16 (unchanged), vitest 4.1.10 (peer-accepts vite ^8), jsdom 29.1.1, @testing-library/react 16.3.2, @testing-library/dom 10.4.1, @testing-library/jest-dom 6.10.0, msw 2.15.0.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "exits 0 (12 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "frontend/src/test/navbar.test.tsx",
+          "frontend/src/test/msw.test.tsx",
+          "frontend/package.json",
+          "frontend/package-lock.json",
+          "frontend/vite.config.ts"
+        ],
+        "commits": [
+          "f34760a",
+          "4a9f912"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写测试（未接触实现计划，允许阅读既有前端组件以选取真实被测组件），实现者子代理独立搭建 vitest@4 + jsdom + RTL + MSW@2 基础设施（未接触测试写手思路）。RED 在控制会话亲自确认。jest-dom 裸安装拉取 v7，与实现者指引中的兼容集不符，已重新固定为 ^6.10.0。06-frontend.md L55 规定的 Playwright 与 axe-core 不在本 feature 范围（M0-FE-001 只要求 Vitest/RTL/MSW 基础配置 + 最小组件测试），随后续前端 feature 落地。测试文件放在 src/test/（对应 06-frontend.md §2.2 推荐目录）。"
     },
     {
       "id": "M0-CONTRACT-001",
