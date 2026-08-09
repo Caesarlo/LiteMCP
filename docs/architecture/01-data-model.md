@@ -149,6 +149,8 @@ erDiagram
 | `rate_limit_burst` | integer nullable | >= 1；NULL 使用全局配置 |
 | `queue_max_depth` | integer nullable | stdio 专属，>= 1；NULL 默认 50 |
 | `queue_timeout_ms` | integer nullable | stdio 专属，> 0；NULL 默认 30000 |
+| `stdio_instance_max` | integer nullable | stdio 专属，1–8；NULL 默认 1。实例池上限，见 [04-stdio-sandbox.md](04-stdio-sandbox.md) 8.1 |
+| `stdio_concurrency_per_instance` | integer nullable | stdio 专属，1–8；NULL 默认 1。单实例内允许的并发在途 `tools/call` 数，调高要求用户代码并发安全 |
 | 通用审计/软删除字段 | — | 含 `row_version` |
 
 约束与索引：
@@ -158,7 +160,7 @@ erDiagram
 - INDEX `(team_id, desired_status)` 支撑按团队浏览市场。
 - INDEX `(created_by, deleted_at)` 支撑创建人查询。
 - `observed_generation <= generation`。
-- `queue_*` 仅允许 stdio 使用；其他类型必须为 NULL。
+- `queue_*`、`stdio_instance_max`、`stdio_concurrency_per_instance` 仅允许 stdio 使用；其他类型必须为 NULL。
 - `team_id` 指向的 team 必须处于 `active` 状态才允许创建或转移；team 被 archive 后其下已有服务继续运行，但不能再接收新服务或转入。
 - `active_config_revision_id` 和 `active_toolset_id` 必须属于当前 service。使用复合外键 `(active_*_id,id)` 分别引用 revision/toolset 的 `(id,service_id)`；为解决建表循环依赖，Alembic 在各表创建完成后再增加这些 FK。
 - 删除服务时同一事务设置 `desired_status=disabled`、吊销所有 API Key、改变 `uniqueness_scope`，并写审计事件。对象和镜像由异步 GC 按引用计数/保留期回收。
