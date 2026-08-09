@@ -277,7 +277,7 @@
       "area": "engineering",
       "title": "提供环境变量示例",
       "behavior": "开发者可以从 .env.example 了解数据库、Redis、密钥、存储和网关配置。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-ENV-001"
       ],
@@ -288,18 +288,30 @@
           "expected": "示例覆盖所有必需配置且不含真实秘密"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "make validate-env-example; node --test scripts/validate-env-example.test.js; backend Settings() load smoke test",
+          "result": "Root .env.example covers all five config groups (database/Redis/encryption keys/storage/gateway) with placeholder values. Gate `make validate-env-example` exits 0; 13 unit tests (node:test) pass, including negative cases: missing database_url/redis_url/encryption_keys, missing storage/gateway, blank required value, and rejection of a real Fernet key, AWS key, GitHub PAT, PEM private key. Manual negative injection of a valid Fernet key made the gate exit non-zero. Smoke test loading the example as backend/.env via pydantic Settings() succeeded (app_name=litemcp, environment=dev, debug=false, gateway=false, storage=local, ./data/storage, 1 encryption key); backend/.env removed after check. Root Makefile added with validate-env-example target (narrow supporting change; full Makefile command set is M0-CMD-001).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          ".env.example",
+          "Makefile",
+          "scripts/validate-env-example.js",
+          "scripts/validate-env-example.test.js"
+        ],
         "commits": []
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按用户在会话中确认的方式,新增最小根 Makefile(仅 validate-env-example 目标)以满足 feature 声明的 make 验证命令;该 Makefile 的完整命令集仍由 M0-CMD-001 负责。.env.example 按 00-overview 仓库布局置于根目录。"
     },
     {
       "id": "M0-CMD-001",

@@ -15,11 +15,11 @@
 - Last updated: 2026-08-09
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
-- Highest-priority unfinished feature: `M0-ENV-002` (.env.example)
-- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; root `Makefile` and Compose startup remain planned. Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
-- Standard verification: No repository-wide verification command exists yet; use the focused verification declared by the active feature. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself.
+- Highest-priority unfinished feature: `M0-CMD-001` (root Makefile unified entry, test/lint/build/test-postgres/test-mysql/test-db-matrix)
+- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; root `Makefile` now exists with only `validate-env-example` (contributed by `M0-ENV-002`); Compose startup remains planned. Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
+- Standard verification: No repository-wide verification command exists yet; use the focused verification declared by the active feature. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets.
 - Current blocker: None.
-- Last passing feature: `M0-ENV-001`
+- Last passing feature: `M0-ENV-002`
 
 ## Session Log
 
@@ -195,3 +195,24 @@
 - Evidence: recorded on `M0-ENV-001` in `feature_list.json`.
 - Decision: Production-refusal checks live in the config layer per the M0 exit standard; `.env.example` coverage is deferred to `M0-ENV-002` (next).
 - Next action: Start `M0-ENV-002` (.env.example covering database/Redis/keys/storage/gateway with no real secrets, verified by `make validate-env-example`).
+
+### Session 004 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-ENV-002`: root `.env.example` covering all five config groups with no real secrets, verified by `make validate-env-example` (declared command required a root Makefile, which did not exist).
+
+#### Checkpoint 15 · M0-ENV-002 implemented and passed its gate
+
+- Feature: `M0-ENV-002`
+- Status change: `not_started` → `passing` (same session).
+- Result:
+  1. `.env.example` (repo root, per `00-overview.md` layout) documents all five config groups — database, Redis, encryption keys, storage, gateway — with placeholder values and generation/usage comments; no real secrets.
+  2. `scripts/validate-env-example.js` — dependency-free node gate (mirrors `validate-feature-list.js` style) checking required-key coverage and rejecting secret-shaped values (Fernet key, AWS key, GitHub PAT, Slack/Stripe/OpenAI/Google tokens, PEM private keys).
+  3. `scripts/validate-env-example.test.js` — 13 tests via `node:test`: complete example passes, comments/blank lines ignored, each missing required group reported, blank required value reported, and each real-secret pattern rejected; placeholder words (e.g. `change-me-...`) not flagged.
+  4. Root `Makefile` with the single `validate-env-example` target — the narrow supporting change the user confirmed in-session to satisfy the declared `make` verification (full Makefile command set stays with `M0-CMD-001`).
+- Files changed: `.env.example` (new), `Makefile` (new), `scripts/validate-env-example.js` (new), `scripts/validate-env-example.test.js` (new), `feature_list.json`, `progress.md`.
+- Verification: TDD — wrote the failing test first (module missing), then implemented until 13/13 passed. `make validate-env-example` exits 0. Manual negative injection of a real Fernet key into `.env.example` made the gate exit non-zero with the expected error, then restored clean. Smoke test copying `.env.example` to `backend/.env` loaded via pydantic `Settings()` succeeded (app_name=litemcp, environment=dev, debug=false, gateway=false, storage=local, ./data/storage, 1 encryption key); `backend/.env` removed after check. `node scripts/validate-feature-list.js` exits 0 (6 passing, 0 in_progress).
+- Evidence: recorded on `M0-ENV-002` in `feature_list.json`.
+- Decision: The declared verification command `make validate-env-example` is satisfied by the new root Makefile; `make` (GNU Make 4.4.1 via chocolatey) and `node` are both available on this Windows environment.
+- Next action: Start `M0-CMD-001` (root Makefile unified entry: test/lint/build/test-postgres/test-mysql/test-db-matrix), whose `make help` verification is now partially scaffolded by the existing minimal Makefile.
