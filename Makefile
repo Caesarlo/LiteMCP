@@ -5,29 +5,47 @@
 # contributed by M0-ENV-002. The frontend test leg joins `make test` once
 # M0-FE-001 establishes the frontend test scaffold.
 #
-# Environment: Windows (GNU Make 4.4.1 via chocolatey). Backend tools are invoked
-# through the local venv; node/npm/make are on PATH.
+# OS + shell strategy: this Makefile is authored on Windows (GNU Make 4.4.1 via
+# chocolatey) but must not silently misbehave if `make` is run on native
+# Linux/macOS (CI runner, contributor machine, container). `$(OS)` is a real
+# environment variable set to `Windows_NT` by the Windows OS itself — it is
+# inherited by every Windows shell (cmd, PowerShell, Git Bash) and is unset on
+# Linux/macOS, so it is the correct top-level OS switch (unlike shell-name
+# sniffing, which only tells you the recipe interpreter, not the platform).
 #
-# Shell strategy (user-directed, M1-DB-003): prefer a POSIX sh when one is
-# available (e.g. running make from Git Bash), else fall back to cmd.exe. GNU Make
-# on Windows only supports sh-family or cmd-family recipe shells (SHELL := pwsh is
-# silently ignored), and a recipe shell decides both the venv path separator
-# (sh: `/`, cmd: `\`) and echo quoting (sh strips quotes and must quote parens/
-# semicolons; cmd prints quotes literally). Shell kind is detected at parse time
-# with `$(shell echo $$0)` — cmd echoes `$0` literally, sh echoes its own name.
-DEFAULT_SHELL := $(shell echo $$0)
-ifeq ($(DEFAULT_SHELL),$$0)
-  SHELL := cmd.exe
-  PY := .venv\Scripts\python.exe
-  RUFF := .venv\Scripts\ruff.exe
-  Q :=
-  BLANK := @echo.
-  SHELLKIND := cmd
+# - Windows_NT: venv layout is `Scripts/`. GNU Make on Windows only supports
+#   sh-family or cmd-family recipe shells (SHELL := pwsh is silently ignored),
+#   and the recipe shell decides both the venv path separator (sh: `/`, cmd:
+#   `\`) and echo quoting (sh strips quotes and must quote parens/semicolons;
+#   cmd prints quotes literally). Shell kind is detected at parse time with
+#   `$(shell echo $$0)` — cmd echoes `$0` literally, sh echoes its own name.
+#   (User-directed, M1-DB-003: prefer POSIX sh when available — e.g. running
+#   make from Git Bash — else fall back to cmd.exe.)
+# - Anything else (Linux/macOS): venv layout is `bin/`, and `make` always runs
+#   recipes through a real POSIX `sh`, so there is no shell-kind ambiguity.
+ifeq ($(OS),Windows_NT)
+  DEFAULT_SHELL := $(shell echo $$0)
+  ifeq ($(DEFAULT_SHELL),$$0)
+    SHELL := cmd.exe
+    PY := .venv\Scripts\python.exe
+    RUFF := .venv\Scripts\ruff.exe
+    Q :=
+    BLANK := @echo.
+    SHELLKIND := cmd
+  else
+    SHELL := sh
+    SHELLFLAGS := -c
+    PY := .venv/Scripts/python.exe
+    RUFF := .venv/Scripts/ruff.exe
+    Q := '
+    BLANK := @echo
+    SHELLKIND := sh
+  endif
 else
   SHELL := sh
   SHELLFLAGS := -c
-  PY := .venv/Scripts/python.exe
-  RUFF := .venv/Scripts/ruff.exe
+  PY := .venv/bin/python
+  RUFF := .venv/bin/ruff
   Q := '
   BLANK := @echo
   SHELLKIND := sh
