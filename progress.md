@@ -18,7 +18,7 @@
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend test leg lands with `M0-FE-001`); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
 - Current blocker: None.
-- Last passing feature: `M0-ADR-001` (docs/adr/ ADR practice + `make validate-adr` gate; out-of-band addition, priority 20, not part of the original 141-feature inventory).
+- Last passing feature: `M0-BE-001` (backend `/livez` liveness contract; `tests/api/test_health.py -k livez` — 3 contract tests pinned HTTP 200 + `application/json` + stable `{"status":"ok"}` payload; scaffold already satisfied the behavior so the isolated-RED step was unobservable and the implementer made zero changes).
 
 ## Session Log
 
@@ -296,3 +296,34 @@
 - Evidence: recorded on `M0-ADR-001` in `feature_list.json`.
 - Decision: The split test-writer/implementer subagent workflow from `AGENTS.md` was intentionally skipped for this feature — the validator's behavior (file-existence/section/topic-keyword checks) is config-like and low-risk of "implementation fitted to its own test," matching the documented exemption for trivial/config-only changes; TDD was still done in-session (RED confirmed before implementation). ADR-0006 is deliberately the only one of the six marked with an unresolved item in its Status/Consequences, rather than silently inventing a reverse-proxy topology the architecture docs don't yet commit to.
 - Next action: Next highest-priority feature is `M0-BE-001` (后端存活检查契约 `tests/api/test_health.py -k livez`), unchanged from before this out-of-band ADR feature was inserted.
+
+### Session 008 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-BE-001` (后端存活检查契约) via the AGENTS.md isolated TDD workflow: test-writer and implementer dispatched as separate subagents with isolated context, RED/GREEN verified by the controlling session.
+
+#### Checkpoint 21 · M0-BE-001 activated
+
+- Feature: `M0-BE-001`
+- Status change: `not_started` → `in_progress`.
+- Result: Baseline confirmed before dispatch. `backend/src/litemcp/main.py` already exposes `GET /livez` → `{"status": "ok"}` (200), so the target behavior exists in the scaffold; `backend/tests/` contains only `core/` — `tests/api/` does not exist yet, so the feature's declared verification (`cd backend && uv run pytest tests/api/test_health.py -k livez`) has no test to run. Architecture-doc contract for `/livez` reviewed: `07-observability.md` L418 (`/livez` must not touch external dependencies; fails only when the process is unrecoverable) and `08-implementation-plan.md` L100 (live reflects process liveness; ready reflects dependencies). No documented response structure richer than `{"status": "ok"}`.
+- Files changed: `feature_list.json` (status), `progress.md`.
+- Verification: `node scripts/validate-feature-list.js` exits 0 (1 in_progress, 9 passing, 0 blocked).
+- Known risk: Because the scaffold already implements the behavior, the isolated RED step may be unobservable as "missing behavior" — the test may be GREEN on first run. This is recorded honestly rather than forcing an artificial RED.
+- Next action: Dispatch the isolated test-writer subagent to write `backend/tests/api/test_health.py` (livez contract tests) from the feature's behavior/verification/source_refs alone.
+
+#### Checkpoint 22 · M0-BE-001 implemented and passed its gate
+
+- Feature: `M0-BE-001`
+- Status change: `in_progress` → `passing` (same session).
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer subagent (isolated context: only `behavior`/`verification`/`source_refs`, forbidden from reading `backend/src/`) produced `backend/tests/api/test_health.py` — 3 contract tests: HTTP 200 when alive, `application/json` content-type, stable payload `{"status": "ok"}`. It reported only the file path.
+  2. Controlling-session RED run: the test was **GREEN on first run** (3 passed). RED was unobservable as "missing behavior" because the scaffold's `backend/src/litemcp/main.py` already exposes `GET /livez` → `{"status": "ok"}`. Recorded honestly — the isolation still holds (test derived from behavior + architecture docs alone), but there was no missing behavior to fail on.
+  3. Fresh implementer subagent (test file path + behavior text only) confirmed the existing `main.py` already satisfies all 3 assertions → **zero implementation change**; no implementer commit exists by design.
+- Files changed: `backend/tests/api/test_health.py` (new), `feature_list.json` (status → passing + evidence), `progress.md`.
+- Verification: Declared `cd backend && .venv/Scripts/python.exe -m pytest tests/api/test_health.py -k livez` → 3 passed; full backend suite 20 passed (17 config + 3 livez); `ruff check src tests` clean; `node scripts/validate-feature-list.js` exits 0 (10 passing, 0 in_progress after transition).
+- Evidence: recorded on `M0-BE-001` in `feature_list.json` (test / validation / regression entries).
+- Commits: `8b0c693` `test(api): add livez contract gate test (M0-BE-001)`; state commit follows.
+- Decision: The isolated split was still exercised end-to-end per user request even though this feature is contract-pinning (implementation pre-exists). The RED unobservability is a feature of "verify existing contract" work, not a process failure — recorded as such. `tests/api/test_health.py` will be extended with `/readyz` cases by `M0-BE-002` (same file, `-k readyz`).
+- Next action: `M0-BE-002` (后端就绪检查 `tests/api/test_health.py -k readyz`), depends on `M0-ENV-001` (passing).

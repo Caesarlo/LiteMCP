@@ -408,7 +408,7 @@
       "area": "backend",
       "title": "验证后端存活检查",
       "behavior": "GET /livez 在进程存活时返回 200 和稳定响应结构。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -417,18 +417,42 @@
           "expected": "livez 契约测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/api/test_health.py -k livez -v",
+          "result": "3 passed (test_livez_returns_200_when_alive, test_livez_returns_json_content_type, test_livez_returns_stable_status_payload). Contract pins GET /livez -> HTTP 200, application/json content-type, and stable payload {'status': 'ok'}. Written by an isolated test-writer subagent from the feature behavior + architecture docs (07-observability.md L26/L417/L418, 08-implementation-plan.md L100). Windows-equivalent of declared uv run pytest (uv unavailable in WSL bash).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "validation",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests",
+          "result": "Full backend suite 20 passed (17 config + 3 livez), no regression. ruff check src tests clean.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "exits 0 (9 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
-        "docs/architecture/09-verification.md"
+        "docs/architecture/09-verification.md",
+        "docs/architecture/07-observability.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/tests/api/test_health.py"
+        ],
+        "commits": [
+          "8b0c693"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写测试（未接触 main.py 等实现），实现者子代理独立确认 backend/src/litemcp/main.py 现有 GET /livez 已满足契约，最小改动为零（无实现变更，故无实现者提交）。RED 因脚手架的 /livez 已返回 {'status':'ok'} 而不可观察——首次运行即 GREEN；这在本 feature 上是预期的（契约固化而非新增行为），隔离性仍通过测试由 behavior 推导验证。"
     },
     {
       "id": "M0-BE-002",
