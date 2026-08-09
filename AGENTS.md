@@ -36,6 +36,18 @@ If the baseline is already broken, record that fact and repair the narrow baseli
 - If new required work is discovered, add a new feature with behavior, dependency, verification, and priority instead of leaving an untracked TODO.
 - Do not mark planned architecture as implemented merely because it appears in documentation.
 
+## TDD Workflow: Isolated Test/Implementation Context
+
+For any feature above trivial complexity, split test-writing and implementation into two separate subagent dispatches with isolated context, so the implementer cannot see the test-writer's reasoning — only the resulting test file and the feature's declared behavior.
+
+1. Dispatch a test-writer subagent with only the feature's `behavior`, `verification`, and relevant `source_refs` from `feature_list.json` — not the implementation plan or existing implementation code. It writes the failing test(s) and reports back the test file path(s) only.
+2. Run the new test yourself in the controlling session and confirm it fails for the expected reason (missing behavior, not a typo or broken setup). This RED verification is never delegated — it is the one step that proves the two agents were actually isolated and the test is real.
+3. Dispatch a fresh implementer subagent with the test file path(s) and the feature's `behavior` text, but not the test-writer's notes, reasoning, or draft implementation. It writes the minimal code to pass, and must not edit the test's assertions.
+4. Run the test yourself again and confirm GREEN, then run the feature's full declared verification command(s).
+5. Record both commits (test-writer, implementer) in the `progress.md` checkpoint like any other implementation slice.
+
+Skip the split for trivial features (single-assertion, config-only changes, or `*-SCOPE-001` decomposition work) — dispatch overhead is not worth it below that bar; one subagent doing full TDD in-session is fine there. Use judgment: the split earns its cost when a feature's behavior is non-obvious enough that a single agent seeing both test and implementation risks writing the implementation to fit its own test rather than the declared behavior.
+
 ## Passing Requires Evidence
 
 A feature may move to `passing` only when all of the following are true:
