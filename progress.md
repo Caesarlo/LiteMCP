@@ -18,7 +18,7 @@
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend test leg lands with `M0-FE-001`); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
 - Current blocker: None.
-- Last passing feature: `M0-BE-001` (backend `/livez` liveness contract; `tests/api/test_health.py -k livez` — 3 contract tests pinned HTTP 200 + `application/json` + stable `{"status":"ok"}` payload; scaffold already satisfied the behavior so the isolated-RED step was unobservable and the implementer made zero changes).
+- Last passing feature: `M0-BE-002` (backend `/readyz` readiness contract; `tests/api/test_health.py -k readyz` — 3 contract tests pin HTTP 200 + `{"status":"ready","components":[{name,status,reason},...]}` when both `probe_database()`/`probe_redis()` are healthy and HTTP 503 + `{"status":"not_ready"}` when either is down, with name/status/reason components and no DSN/host/stack leakage; RED observed in-session (missing probe seam), isolated TDD split exercised end-to-end; implementer added the two sync module-level fail-closed short-timeout DB/Redis probes to `main.py`, `/livez` unchanged. Previous: `M0-BE-001` `/livez` contract, 3 tests pinned HTTP 200 + `application/json` + stable `{"status":"ok"}` payload).
 
 ## Session Log
 
@@ -327,3 +327,33 @@
 - Commits: `8b0c693` `test(api): add livez contract gate test (M0-BE-001)`; state commit follows.
 - Decision: The isolated split was still exercised end-to-end per user request even though this feature is contract-pinning (implementation pre-exists). The RED unobservability is a feature of "verify existing contract" work, not a process failure — recorded as such. `tests/api/test_health.py` will be extended with `/readyz` cases by `M0-BE-002` (same file, `-k readyz`).
 - Next action: `M0-BE-002` (后端就绪检查 `tests/api/test_health.py -k readyz`), depends on `M0-ENV-001` (passing).
+
+### Session 009 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-BE-002` (后端就绪检查) via the AGENTS.md isolated TDD workflow: test-writer and implementer dispatched as separate subagents with isolated context, RED/GREEN verified by the controlling session.
+
+#### Checkpoint 23 · M0-BE-002 activated
+
+- Feature: `M0-BE-002`
+- Status change: `not_started` → `in_progress`.
+- Result: Baseline confirmed before dispatch. `backend/src/litemcp/main.py` exposes `GET /readyz` but only as a static scaffold placeholder returning `{"status": "ok"}` — no real dependency probing. `backend/tests/api/test_health.py` contains only the 3 `-k livez` contract tests; no `-k readyz` cases exist yet. Backend deps already include `sqlalchemy[asyncio]`, `asyncpg`, `redis>=5.1`, so real DB/Redis probes are implementable without new dependencies. Readiness contract per `07-observability.md`: L26 (`/readyz` judges whether the instance can safely accept traffic), L419 (backend `/readyz` checks DB, necessary Redis Session capability, local config/keys; Redis rate-limit-only failure keeps ready but degraded), L420 (health responses only expose component/status/reason code — no DSN, host, stack, version, or service list). `asyncio_mode = "strict"` is configured, so async tests need pytest-asyncio markers.
+- Files changed: `feature_list.json` (status), `progress.md`.
+- Verification: `node scripts/validate-feature-list.js` exits 0 (1 in_progress, 10 passing, 0 blocked).
+- Next action: Dispatch the isolated test-writer subagent to write the `-k readyz` cases in `backend/tests/api/test_health.py` from the feature's behavior/verification/source_refs alone.
+
+#### Checkpoint 24 · M0-BE-002 implemented and passed its gate
+
+- Feature: `M0-BE-002`
+- Status change: `in_progress` → `passing` (same session).
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer subagent (isolated context: only `behavior`/`verification`/source_refs, forbidden from reading `backend/src/`) appended `TestReadyzContract` (3 tests) to `backend/tests/api/test_health.py` and defined the failure-injection seam: two sync module-level bool probes `probe_database()`/`probe_redis()` on `litemcp.main`, resolved at request time so monkeypatch is observable. Response contract: 200/`{"status":"ready","components":[...]}` when both healthy; 5xx/`{"status":"not_ready"}` when either down; each component exactly `{name,status,reason}` with status mirroring the probe; body leaks no DSN/host/stack/secrets (07-observability.md L420, pinned via `_assert_no_sensitive_or_operational_leak`).
+  2. Controlling-session RED run: `-k readyz` → 3 failed, all on `AttributeError: module 'litemcp.main' has no attribute 'probe_database'` — the missing real-readiness seam, not a typo or broken setup.
+  3. Fresh implementer subagent (test file + behavior text only) changed only `backend/src/litemcp/main.py`: added `probe_database()` (async `SELECT 1` via SQLAlchemy async engine wrapped in a sync bool contract, 2.0s timeout, fail-closed False) and `probe_redis()` (sync `redis.Redis.ping()`, 2.0s socket timeouts, fail-closed False); `/readyz` handler resolves probes at request time and runs them via `asyncio.to_thread` so the event loop never blocks and the sync `asyncio.run`-based DB probe runs on a loop-free worker thread; returns 200 `{"status":"ready"}` or 503 `{"status":"not_ready"}`; `/livez` untouched.
+- Files changed: `backend/tests/api/test_health.py` (test-writer), `backend/src/litemcp/main.py` (implementer), `feature_list.json` (status → passing + evidence + implementation files), `progress.md`.
+- Verification: `pytest tests/api/test_health.py -k readyz -v` → 3 passed (GREEN; RED confirmed earlier). Full suite `pytest -q` → 23 passed (17 config + 3 livez + 3 readyz), no regression. `ruff check src tests` clean (4 `# noqa: BLE001` probe fail-closed catches). `mypy src` clean (1 `# type: ignore[arg-type]` on `asyncio.run`). Real-probe smoke (unmonkeypatched, unreachable loopback:1) → `probe_database()` False in ~2.05s, `probe_redis()` False in ~2.01s, no exception/hang. `/livez` unchanged (200 + `{"status":"ok"}`, no dependency probing). `node scripts/validate-feature-list.js` exits 0 (10 passing, 1 in_progress before transition).
+- Evidence: recorded on `M0-BE-002` in `feature_list.json`.
+- Commits: test + implementer + state — filled below after commit.
+- Decision: Real DB/Redis probes are deliberately fail-closed with short timeouts, and reason codes carry only `ok`/`connection_failed` (no DSN/host) per 07-observability L420. The probe seam (`probe_database`/`probe_redis`) is the durable contract that M1+ code will reuse once the real SQLAlchemy session factory (M1-DB-001) exists. Redis "rate-limit-only → degraded" semantics (L419) are deferred to when Redis rate-limiting exists (M4-LIMIT-*), out of this feature's scope.
+- Next action: `M0-BE-003` (关联 ID 中间件 `tests/middleware/test_correlation.py`, priority 16), unchanged from the plan.

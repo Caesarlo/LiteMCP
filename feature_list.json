@@ -461,7 +461,7 @@
       "area": "backend",
       "title": "验证后端就绪检查",
       "behavior": "GET /readyz 根据数据库和 Redis 依赖状态返回真实就绪结果。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-ENV-001"
       ],
@@ -472,14 +472,42 @@
           "expected": "正常与依赖故障测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/api/test_health.py -k readyz -v",
+          "result": "3 passed (test_readyz_all_dependencies_healthy_returns_200, test_readyz_database_down_returns_5xx, test_readyz_redis_down_returns_5xx). Contract pins GET /readyz -> HTTP 200 + {\"status\":\"ready\",\"components\":[{name,status,reason},...]} when both probe_database()/probe_redis() are healthy and HTTP 503 + {\"status\":\"not_ready\"} when either is down; each component status mirrors the corresponding probe; body carries only component/status/reason with no DSN/host/stack/secrets (07-observability.md L420). Failure-injection seam defined by the test: two sync module-level bool probes on litemcp.main resolved at request time so monkeypatch is observable. Written by an isolated test-writer subagent from behavior + architecture docs; RED confirmed in-session (module had no probe_database/probe_redis). Windows-equivalent of declared uv run pytest.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 23 passed (17 config + 3 livez + 3 readyz), no regression. ruff clean (4 BLE001 probe fail-closed catches marked # noqa). mypy clean (one # type: ignore[arg-type] on asyncio.run, isolated in _run_in_new_loop).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "validation",
+          "command": "LITEMCP_DATABASE_URL=postgresql+asyncpg://u:p@127.0.0.1:1/db LITEMCP_REDIS_URL=redis://127.0.0.1:1/0 python -c '... probe_database(); probe_redis() ...' (unmonkeypatched real probes against unreachable loopback)",
+          "result": "Real probes fail closed to False with ~2.0s timeout each (db=2.05s, redis=2.01s), no exception and no hang; /livez unchanged (200 + {\"status\":\"ok\"}, no dependency probing).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "exits 0 (10 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/tests/api/test_health.py",
+          "backend/src/litemcp/main.py"
+        ],
         "commits": []
       },
       "blocker": null,
