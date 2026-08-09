@@ -1,0 +1,13 @@
+# Obsidian personal state and caches
+.obsidian/workspace*.json
+.obsidian/cache/
+.obsidian/plugins/*/main.js
+.obsidian/plugins/*/manifest.json
+.obsidian/plugins/*/styles.css
+
+# OS metadata
+.DS_Store
+Thumbs.db
+
+# CodeGraph local index (regenerated per machine via `codegraph init`)
+.codegraph/
