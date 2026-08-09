@@ -583,6 +583,79 @@
       "notes": ""
     },
     {
+      "id": "M0-ADR-001",
+      "priority": 20,
+      "milestone": "M0",
+      "area": "harness",
+      "title": "建立 ADR 基础设施并记录 M0 关键架构决策",
+      "behavior": "仓库存在 docs/adr/ 目录，含 Nygard 风格模板（Status/Context/Decision/Consequences）与索引 README；至少存在 6 篇编号 ADR，分别覆盖 08-implementation-plan.md M0 交付要求中列出的议题：MCP SDK/version、DB 方言策略、outbox/worker 机制、feature flag registry、对象存储/Registry 接口、生产反向代理与 trusted proxy。每篇 ADR 的 Decision 内容须可追溯到对应架构文档中已声明的立场（而非新造决策），并在 ADR 内引用具体文档与章节。",
+      "status": "passing",
+      "dependencies": [
+        "M0-HARNESS-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "node scripts/validate-adr.js",
+          "expected": "docs/adr 目录、模板与 6 篇必需 ADR 均通过结构校验：每篇含 Status/Context/Decision/Consequences 四个必需小节，且 M0 六个必须议题均被至少一篇 ADR 覆盖"
+        },
+        {
+          "type": "manual",
+          "command": "逐篇核对每个 ADR 的 Decision 与引用章节，确认内容与对应架构文档（00-10）中已声明的立场一致，不是凭空新造的决策",
+          "expected": "6 篇 ADR 的 Decision 均能在引用的架构文档章节中找到对应依据"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "node --test scripts/validate-adr.test.js",
+          "result": "8/8 passed. Confirmed RED first (module missing) before implementing scripts/validate-adr.js, then GREEN.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "validation",
+          "command": "node scripts/validate-adr.js (also via `make validate-adr`)",
+          "result": "docs/adr/ has 6 numbered ADR(s) covering all 6 required M0 topics. Manual negative injection (removing 0006-reverse-proxy-trusted-proxy.md) made the gate fail with 2 errors (count + missing topic coverage); restoring the file returned it to a clean pass.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "manual review",
+          "command": "Explore subagent traced all 6 topics to specific docs/architecture/*.md file:line citations before drafting; each of the 6 ADR files' Decision/Consequences sections cites those exact source refs and explicitly separates [既定]/committed content from [建议]/[后续] provisional content.",
+          "result": "ADR-0001 through ADR-0005 formalize existing committed decisions. ADR-0006 explicitly flags that concrete reverse-proxy topology/TLS-termination is undecided per 08-implementation-plan.md L140 (M2 entry criterion) rather than inventing one.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js; make validate-env-example; make help",
+          "result": "feature-list validator exits 0 (39 features, 9 passing, 0 in_progress after transition); validate-env-example still passes; make help lists the new validate-adr target alongside existing ones.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
+      "source_refs": [
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/00-overview.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [
+          "docs/adr/README.md",
+          "docs/adr/template.md",
+          "docs/adr/0001-mcp-sdk-version-pinning.md",
+          "docs/adr/0002-db-dialect-strategy.md",
+          "docs/adr/0003-outbox-worker-reliability.md",
+          "docs/adr/0004-feature-flag-registry.md",
+          "docs/adr/0005-object-storage-registry-interface.md",
+          "docs/adr/0006-reverse-proxy-trusted-proxy.md",
+          "scripts/validate-adr.js",
+          "scripts/validate-adr.test.js",
+          "Makefile"
+        ],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "由用户在 2026-08-09 会话中请求配置 ADR 实践后新增，非原始 141 条清单的一部分。"
+    },
+    {
       "id": "M1-DB-001",
       "priority": 100,
       "milestone": "M1",

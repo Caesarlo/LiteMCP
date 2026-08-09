@@ -8,7 +8,7 @@
 # Environment: Windows (GNU Make 4.4.1 via chocolatey). Backend tools are invoked
 # through the local venv (uv is not available in WSL bash); node/npm/make are on PATH.
 
-.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example
+.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr
 
 help:
 	@echo "LiteMCP unified management entry point."
@@ -23,6 +23,7 @@ help:
 	@echo ""
 	@echo "Other targets:"
 	@echo "  make validate-env-example   gate .env.example coverage and no real secrets (M0-ENV-002)"
+	@echo "  make validate-adr           gate docs/adr/ structure and required M0 topic coverage (M0-ADR-001)"
 
 test:
 	cd backend && .venv/Scripts/python.exe -m pytest
@@ -50,3 +51,6 @@ test-db-matrix:
 
 validate-env-example:
 	node scripts/validate-env-example.js
+
+validate-adr:
+	node scripts/validate-adr.js
