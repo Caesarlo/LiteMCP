@@ -883,7 +883,7 @@
       "area": "data",
       "title": "定义跨方言基础类型",
       "behavior": "ID、UTC 时间、JSON 文档和密文字段在 PostgreSQL 与 MySQL 行为一致。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-DB-001"
       ],
@@ -894,18 +894,46 @@
           "expected": "双方言类型契约通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-types",
+          "result": "RED confirmed in controlling session first (ModuleNotFoundError: litemcp.db.types). After implementer: 6 passed against REAL PostgreSQL (localhost:5433, PG 16.14) and REAL MySQL (localhost:3307, MySQL 8.4.11) — no SQLite, no skips (connection failure = hard fail). 2 DDL-contract tests (compiled CREATE TABLE per dialect matches 01-data-model.md L40-46: PG UUID/TIMESTAMP WITH TIME ZONE/JSONB/BYTEA/TEXT/VARCHAR+CHECK; MySQL CHAR(36)/DATETIME(6)/JSON/LONGBLOB/LONGTEXT/VARCHAR+CHECK). 2 live round-trip tests on BOTH dialects: ID (uuid.UUID↔CHAR(36) canonical string), UTC_TS (UTC instant preserved; MySQL naive DATETIME re-read as UTC per the 'MySQL 读取后补 UTC 语义' rule), JSON_DOC (nested dict/list), CIPHERTEXT (bytes byte-for-byte), LONG_TEXT (>4KiB), ENUM_CODE (allowed code round-trips). 2 enum-rejection tests: a disallowed code is rejected by the DB CHECK on both dialects (IntegrityError/OperationalError).",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 55 passed (49 + 6), no regression. ruff clean (one cosmetic UP017 fix in the test file applied by the controller: timezone.utc → datetime.UTC, behavior-identical). mypy clean (9 source files). compileall clean.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node --test scripts/validate-make-help.test.js; node scripts/validate-feature-list.js",
+          "result": "make-help gate 7/7 (M0-CMD-001 intact; test-postgres/test-mysql/test-db-matrix refusal targets untouched). feature-list validator exits 0 (16 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/types.py",
+          "backend/tests/db/test_types.py",
+          "Makefile",
+          "docker-compose.yml",
+          ".gitignore"
+        ],
+        "commits": [
+          "c6da839",
+          "954b795"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行。环境前提：这是第一个需要真实双方言数据库的验证——Docker Desktop 由控制会话启动；本机本地 postgres 占 5432、本地 mysqld 占 3306，故 compose 默认保持标准端口（5432/3306，按用户要求）而端口覆盖通过根 .env（POSTGRES_PORT=5433、MYSQL_PORT=3307，.env 已 gitignore）；docker-compose.yml 新增 mysql:8 服务并挂 profiles:[\"dialects\"]，默认栈仍单一 PostgreSQL（00-overview §5.3），契约测试时 docker compose --profile dialects up -d mysql。实现：litemcp/db/types.py 六个 TypeDecorator 均用 load_dialect_impl 按方言返回物理类型并 cache_ok=True；UTC_TS 写时归一化 UTC、MySQL 存 naive UTC 墙钟（读端补 UTC 语义）；ENUM_CODE 取代码最大长度+16 的 VARCHAR（MySQL 拒绝无长度 VARCHAR）；ID 用 coerce_compared_value 保证 MySQL CHAR(36) WHERE 绑定。make test-db-types 目标会先 docker compose up -d --wait 启动两个方言库再跑套件（失败即诚实失败，无 skip）。控制会话对测试文件做了一处行为一致的美容修正（ruff UP017: timezone.utc→UTC）。"
     },
     {
       "id": "M1-DB-003",
