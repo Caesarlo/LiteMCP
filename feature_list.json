@@ -359,7 +359,7 @@
       "area": "engineering",
       "title": "建立本地 Compose 编排",
       "behavior": "开发者可通过 Compose 启动 database、redis、backend、worker 和 frontend。",
-      "status": "in_progress",
+      "status": "passing",
       "dependencies": [
         "M0-ENV-001",
         "M0-ENV-002"
@@ -371,18 +371,35 @@
           "expected": "Compose 配置解析成功且服务齐全"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "node --test scripts/validate-compose.test.js; docker compose config; docker compose up -d --wait (smoke); docker compose down -v",
+          "result": "Gate test 4/4 GREEN (RED confirmed before implementation: no compose file -> 'no configuration file provided'). Root docker-compose.yml parses (exit 0) with all five services: database=postgres:16-alpine, redis=redis:7-alpine, backend=worker shared litemcp-app:dev image (uv build) with different commands, frontend=Vite dev on :5173. docker compose config --services lists backend/database/frontend/redis/worker. docker compose up -d --wait brought all five services healthy; backend /livez -> HTTP 200 {\"status\":\"ok\"}, frontend / -> HTTP 200, worker placeholder entrypoint (python -m litemcp.workers) logged started and stayed alive; stack torn down with -v. backend image builds (uv sync --frozen --no-dev, 68 locked deps, litemcp==0.1.0; Dockerfile verified in-image via uvicorn version + get_settings() + import). frontend image builds (npm ci). Regression: node scripts/validate-feature-list.js exits 0 (7 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "docker-compose.yml",
+          "backend/Dockerfile",
+          "backend/.dockerignore",
+          "backend/src/litemcp/workers/__init__.py",
+          "backend/src/litemcp/workers/__main__.py",
+          "frontend/Dockerfile",
+          "frontend/.dockerignore"
+        ],
+        "commits": [
+          "eb938d8"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "范围边界记录：worker 服务使用最小占位入口 src/litemcp/workers（python -m litemcp.workers），真实 worker 任务（build/sync/GC/密钥轮换）属于 M3，后续 feature 会重写该入口。默认数据库仅 PostgreSQL（文档约定单一关系库/环境），MySQL profile 不在本 feature 范围。00-overview §9 文档化的 make dev/make docker-down 等 compose 入口目标未在本 feature 加入 Makefile（M0-CMD-001 已拥有 Makefile 门禁；这些目标留待后续 feature，避免本 feature 验证面外扩）。compose 全部 ${VAR} 带 :- 默认值，无 .env 时 docker compose config 可解析。backend/worker 同镜像不同命令（build: ./backend + image: litemcp-app:dev；worker 仅引用 image + command 覆盖）。"
     },
     {
       "id": "M0-BE-001",

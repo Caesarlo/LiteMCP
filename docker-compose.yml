@@ -1,0 +1,100 @@
+# LiteMCP local development orchestration (M0-BOOT-001).
+#
+# Starts the five core processes described in docs/architecture/00-overview.md
+# (§5.3, §7): database, redis, backend, worker and frontend. The default
+# relational database profile is PostgreSQL only — a single relational DB per
+# environment (no MySQL profile here).
+#
+# Every `${VAR}` below has an inline default (`${VAR:-default}`), so
+# `docker compose config` parses successfully with no `.env` file and no
+# environment variables set. Override any value by exporting it in the shell
+# or via a root `.env` file (values are read at `docker compose` parse time).
+#
+# The backend and worker services share one application image
+# (`litemcp-app:dev`, built from ./backend) but run different commands:
+#   - backend  runs uvicorn serving litemcp.main:app on :8000
+#   - worker   runs the placeholder `python -m litemcp.workers` entrypoint
+#              (real worker jobs — build, sync, GC, key rotation — land in M3)
+name: litemcp
+
+services:
+  database:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: litemcp
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-litemcp}
+      POSTGRES_DB: litemcp
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U litemcp -d litemcp"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build:
+      context: ./backend
+    image: litemcp-app:dev
+    environment:
+      # Dev environment contract (see backend/src/litemcp/core/config.py):
+      # required vars are DATABASE_URL, REDIS_URL and ENCRYPTION_KEYS.
+      LITEMCP_ENVIRONMENT: dev
+      LITEMCP_DEBUG: "false"
+      LITEMCP_DATABASE_URL: postgresql+asyncpg://litemcp:${POSTGRES_PASSWORD:-litemcp}@database:5432/litemcp
+      LITEMCP_REDIS_URL: redis://redis:6379/0
+      # Dev-only placeholder key. Generate a real one with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # The prod environment (LITEMCP_ENVIRONMENT=prod) refuses sample keys.
+      LITEMCP_ENCRYPTION_KEYS: ${LITEMCP_ENCRYPTION_KEYS:-change-me-generate-a-fernets-key}
+      LITEMCP_LOG_LEVEL: ${LITEMCP_LOG_LEVEL:-INFO}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    image: litemcp-app:dev
+    command: ["python", "-m", "litemcp.workers"]
+    environment:
+      LITEMCP_ENVIRONMENT: dev
+      LITEMCP_DEBUG: "false"
+      LITEMCP_DATABASE_URL: postgresql+asyncpg://litemcp:${POSTGRES_PASSWORD:-litemcp}@database:5432/litemcp
+      LITEMCP_REDIS_URL: redis://redis:6379/0
+      LITEMCP_ENCRYPTION_KEYS: ${LITEMCP_ENCRYPTION_KEYS:-change-me-generate-a-fernets-key}
+      LITEMCP_LOG_LEVEL: ${LITEMCP_LOG_LEVEL:-INFO}
+      LITEMCP_WORKER_ID: ${LITEMCP_WORKER_ID:-local}
+    depends_on:
+      database:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5173"]
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+    ports:
+      - "${FRONTEND_PORT:-5173}:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:

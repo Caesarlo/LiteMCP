@@ -14,11 +14,11 @@
 
 - Last updated: 2026-08-09
 - Repository root: `E:\work\LiteMCP`
-- Active feature: `M0-BOOT-001` (本地 Compose 编排：database/redis/backend/worker/frontend)
-- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; the root `Makefile` now provides the unified management entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — contributed by `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`); Compose startup remains planned (`M0-BOOT-001`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
+- Active feature: None.
+- Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend test leg lands with `M0-FE-001`); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets.
 - Current blocker: None.
-- Last passing feature: `M0-CMD-001`
+- Last passing feature: `M0-BOOT-001`
 
 ## Session Log
 
@@ -250,3 +250,18 @@
 - Files changed: `feature_list.json` (status), `progress.md`.
 - Verification: `node scripts/validate-feature-list.js` exits 0 (1 in_progress, 7 passing, 0 blocked).
 - Next action: Dispatch the isolated test-writer to write `scripts/validate-compose.test.js` (gate test driving the compose file's existence and five-service structure).
+
+#### Checkpoint 18 · M0-BOOT-001 implemented and passed its gate
+
+- Feature: `M0-BOOT-001`
+- Status change: `in_progress` → `passing` (same session).
+- Result:
+  1. Isolated TDD per AGENTS.md: test-writer subagent produced `scripts/validate-compose.test.js` (4 dependency-free node:test cases); controller confirmed RED in-session (`docker compose config` → `no configuration file provided: not found`), then a fresh implementer subagent built the implementation without seeing the test-writer's reasoning. Test commit `eb938d8`.
+  2. `docker-compose.yml` (repo root) with exactly five services: `database` (postgres:16-alpine, healthcheck+volume), `redis` (redis:7-alpine), `backend` (`build: ./backend` + `image: litemcp-app:dev`, uvicorn `litemcp.main:app` on :8000), `worker` (same image, `command: python -m litemcp.workers`, placeholder), `frontend` (node:22-alpine, Vite dev on :5173). Every `${VAR}` has an inline `:-` default so `docker compose config` parses with no `.env` file; compose service names wired into `LITEMCP_DATABASE_URL`/`LITEMCP_REDIS_URL`; `LITEMCP_ENVIRONMENT=dev`; dev Fernet placeholder key with generation comment.
+  3. `backend/Dockerfile` + `.dockerignore` (excludes the 44k-file `.venv`/tests/caches): installs pinned `uv 0.11.18`, `uv sync --frozen --no-dev` builds+installs the `uv_build`-backed package, CMD uvicorn. `frontend/Dockerfile` + `.dockerignore` (excludes `node_modules`/`dist`): `npm ci` from lockfile, Vite dev.
+  4. `backend/src/litemcp/workers/__init__.py` + `__main__.py`: minimal placeholder worker entrypoint (`python -m litemcp.workers`) that logs "M0-BOOT-001 placeholder" and stays alive; real worker jobs (build/sync/GC/key rotation) are M3 scope.
+- Files changed: `docker-compose.yml`, `backend/Dockerfile`, `backend/.dockerignore`, `backend/src/litemcp/workers/__init__.py`, `backend/src/litemcp/workers/__main__.py`, `frontend/Dockerfile`, `frontend/.dockerignore`, `feature_list.json`, `progress.md`.
+- Verification: `node --test scripts/validate-compose.test.js` → 4/4 GREEN (RED confirmed earlier). `docker compose config` exits 0; `--services` lists backend/database/frontend/redis/worker. `docker compose up -d --wait` → all five services healthy; backend `/livez` HTTP 200 `{"status":"ok"}`, frontend `/` HTTP 200, worker placeholder log line present; `docker compose down -v` cleaned up. Backend image builds (`uv sync --frozen`, 68 locked deps, `litemcp==0.1.0`) and frontend image builds (`npm ci`). `node scripts/validate-feature-list.js` exits 0 (7 passing, 1 in_progress before transition). ruff/mypy clean on the new worker package (reported by implementer subagent; config-only change).
+- Evidence: recorded on `M0-BOOT-001` in `feature_list.json`.
+- Decision: Worker is a minimal runnable placeholder (M3 reuses/replaces it). MySQL compose profile is intentionally out of scope (single relational DB per environment per 00-overview §5.3). `make dev`/`make docker-down` (00-overview §9) are documented but NOT added to the Makefile here — M0-CMD-001 owns the Makefile gate; flagging as a candidate follow-up feature rather than silently expanding M0-BOOT-001's surface. `backend/uv.lock` (already tracked from the scaffold) is what makes `uv sync --frozen` reproducible in the image.
+- Next action: Next highest-priority feature is `M0-BE-001` (后端存活检查契约 `tests/api/test_health.py -k livez`) — the first feature that exercises real backend API behavior via pytest, per the startup selection rule.

@@ -1,0 +1,9 @@
+# Keep the build context small and deterministic (M0-BOOT-001).
+# frontend/node_modules is huge and would otherwise be copied into the
+# image build context.
+node_modules/
+dist/
+*.log
+.vscode/
+.idea/
+.DS_Store

@@ -1,0 +1,13 @@
+# Keep the build context small and deterministic (M0-BOOT-001).
+# backend/.venv is a multi-thousand-file virtualenv and would otherwise be
+# copied into the image build context.
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+tests/
