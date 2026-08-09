@@ -635,7 +635,7 @@
       "area": "contracts",
       "title": "建立 OpenAPI 快照门禁",
       "behavior": "管理 API 的 OpenAPI 文档可以生成快照并检测非预期破坏性变化。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-BE-001"
       ],
@@ -646,18 +646,46 @@
           "expected": "OpenAPI 快照测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-openapi",
+          "result": "RED confirmed in controlling session first (4 failed, all FileNotFoundError on the missing backend/src/litemcp/openapi.json). After implementer: 4 passed. Gate pins: (1) committed snapshot exists; (2) valid OpenAPI 3.1.0 with info and paths /livez + /readyz; (3) the spec regenerated NOW from app.openapi() deep-equals the committed snapshot (parsed-JSON equality — the drift gate); (4) negative case: the same comparison raises 'OpenAPI drift detected' when the live spec gains an unapproved path (monkeypatched). Snapshot generated from the running app (never hand-written), deterministic json.dumps(indent=2, sort_keys=True) + trailing newline. Windows node/python.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests",
+          "result": "Full backend suite 43 passed (39 existing + 4 contract), no regression. ruff clean. The 16 M0-BE-003 correlation tests still pass after their probe route was moved from import-time registration to a module-scoped autouse fixture (see notes). A double-blank-line ruff I001 on the new contract test was resolved by deleting one blank line rather than adding a permanent per-file-ignore; pyproject.toml left unchanged.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "validation",
+          "command": "make update-openapi-snapshot (regeneration round-trip); node --test scripts/validate-make-help.test.js; node scripts/validate-feature-list.js",
+          "result": "Regeneration round-trip byte-stable: sha256 of openapi.json identical before/after make update-openapi-snapshot (def7b9fbc...); git diff --exit-code on the snapshot clean. make-help gate 7/7 pass (M0-CMD-001 unchanged); make help lists the six unified commands plus the new test-openapi / update-openapi-snapshot targets. feature-list validator exits 0 (13 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/openapi.json",
+          "backend/scripts/regenerate_openapi.py",
+          "backend/tests/contract/test_openapi_snapshot.py",
+          "backend/tests/middleware/test_correlation.py",
+          "Makefile"
+        ],
+        "commits": [
+          "41614fc",
+          "6220b63"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手仅依据 behavior/verification/source_refs 编写 4 个门禁测试（含漂移负向用例），实现者独立生成快照 + 再生成脚本 + 两个 Makefile 目标。跨模块隔离修复：M0-BE-003 关联测试的 test-only 探针路由原本在模块 import 时注册到共享 app，泄漏进 app.openapi() 会破坏本特性漂移门禁（全套跑红，Diverging sections: ['paths']）；改为 module-scoped autouse fixture 惰性注册并在 teardown 移除 + 重置 openapi_schema，断言未改、16 个关联测试仍全过。make update-openapi-snapshot 提供 09-verification.md L139 要求的'破坏性 diff 显式批准'路径（意图性变更先更新快照再提交）。make test 前端腿接线（残留提示）仍为已记录候选，未在本特性改动。快照位于 backend/src/litemcp/openapi.json，为 06-frontend.md L449 后续前端生成类型提供稳定契约源。"
     },
     {
       "id": "M0-CI-001",
