@@ -15,11 +15,11 @@
 - Last updated: 2026-08-09
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
-- Highest-priority unfinished feature: `M0-CMD-001` (root Makefile unified entry, test/lint/build/test-postgres/test-mysql/test-db-matrix)
-- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; root `Makefile` now exists with only `validate-env-example` (contributed by `M0-ENV-002`); Compose startup remains planned. Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
-- Standard verification: No repository-wide verification command exists yet; use the focused verification declared by the active feature. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets.
+- Highest-priority unfinished feature: `M0-BOOT-001` (本地 Compose 编排：database/redis/backend/worker/frontend)
+- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; the root `Makefile` now provides the unified management entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — contributed by `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`); Compose startup remains planned (`M0-BOOT-001`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
+- Standard verification: `make test` runs backend unit/integration tests (frontend test leg lands with `M0-FE-001`); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets.
 - Current blocker: None.
-- Last passing feature: `M0-ENV-002`
+- Last passing feature: `M0-CMD-001`
 
 ## Session Log
 
@@ -216,3 +216,23 @@
 - Evidence: recorded on `M0-ENV-002` in `feature_list.json`.
 - Decision: The declared verification command `make validate-env-example` is satisfied by the new root Makefile; `make` (GNU Make 4.4.1 via chocolatey) and `node` are both available on this Windows environment.
 - Next action: Start `M0-CMD-001` (root Makefile unified entry: test/lint/build/test-postgres/test-mysql/test-db-matrix), whose `make help` verification is now partially scaffolded by the existing minimal Makefile.
+
+### Session 005 · 2026-08-09
+
+#### Goal
+
+- Implement `M0-CMD-001`: root Makefile unified entry (`make help` listing test/lint/build/test-postgres/test-mysql/test-db-matrix), TDD-driven with a reproducible gate test.
+
+#### Checkpoint 16 · M0-CMD-001 implemented and passed its gate
+
+- Feature: `M0-CMD-001`
+- Status change: `not_started` → `in_progress` → `passing` (same session).
+- Result:
+  1. TDD — wrote `scripts/validate-make-help.test.js` (7 dependency-free node:test cases) first and confirmed all 7 RED (`make help` had no rule, targets missing), then implemented the Makefile until 7/7 GREEN.
+  2. `Makefile` (extended from the `M0-ENV-002` minimal version): `help` target documenting the six unified commands + `validate-env-example`; `test` = backend pytest (venv) with a printed note that the frontend test leg lands with `M0-FE-001`; `lint` = backend `ruff check src tests` + frontend `npm run lint`; `build` = backend `compileall -q src` + frontend `tsc && vite build`; `test-postgres`/`test-mysql`/`test-db-matrix` exit non-zero with an explicit prerequisite notice rather than false-passing until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist.
+  3. Environment: GNU Make 4.4.1 (chocolatey); backend venv tools invoked via `.venv/Scripts/` (uv unavailable in WSL bash); frontend `npm run lint` and `npm run build` both pass with no working-tree side effects.
+- Files changed: `Makefile`, `scripts/validate-make-help.test.js` (new), `feature_list.json`, `progress.md`.
+- Verification: `node --test scripts/validate-make-help.test.js` → 7/7 pass (make help lists all six; test/lint/build exit 0; db-matrix trio refuses with notice); `make help` exits 0; regression `make validate-env-example` exits 0 and `node scripts/validate-feature-list.js` exits 0 (7 passing, 0 in_progress after transition).
+- Evidence: recorded on `M0-CMD-001` in `feature_list.json`.
+- Decision: The db-matrix targets are honest guards, not stubs that lie — they fail fast with a prerequisite message and will be rewritten by the features that build compose/dialects. The `make test` frontend leg is deliberately deferred to `M0-FE-001` (its declared verification is `cd frontend && npm run test -- --run`), recorded as a cross-feature handoff.
+- Next action: Start `M0-BOOT-001` (本地 Compose 编排：database/redis/backend/worker/frontend), whose `docker compose config` verification depends on the now-typed config from `M0-ENV-001` and `.env.example` from `M0-ENV-002`.

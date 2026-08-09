@@ -320,7 +320,7 @@
       "area": "engineering",
       "title": "建立根 Makefile 统一入口",
       "behavior": "根目录提供 make test、lint、build、test-postgres、test-mysql 和 test-db-matrix。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -329,18 +329,28 @@
           "expected": "规定的统一命令全部可发现"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "node --test scripts/validate-make-help.test.js; make help; make test; make lint; make build",
+          "result": "7/7 gate tests pass. make help exits 0 and lists all six unified commands (test, lint, build, test-postgres, test-mysql, test-db-matrix). make test runs backend pytest via venv (17 config tests green) and prints that the frontend test leg lands with M0-FE-001. make lint runs backend ruff (src+tests clean) and frontend eslint (exit 0, no file changes). make build runs backend compileall and frontend tsc+vite build (exit 0, built in ~4s). test-postgres/test-mysql/test-db-matrix exit non-zero with an explicit prerequisite notice and refuse to false-pass until M0-BOOT-001 compose + M1-DB-* dialect contracts exist. Regression: make validate-env-example exits 0; node scripts/validate-feature-list.js exits 0 (1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "Makefile",
+          "scripts/validate-make-help.test.js"
+        ],
         "commits": []
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 TDD 实现：先写 scripts/validate-make-help.test.js（7 个 node:test 用例）并确认全部 RED（make help 无规则、各 target 缺失），再实现 Makefile 使 7/7 GREEN。db-matrix 三目标在依赖未就绪时拒绝假通过（非零退出 + 前置条件说明），待 M0-BOOT-001/M1-DB-* 落地后由对应 feature 改写为真实矩阵。make test 的前端测试腿留给 M0-FE-001 接入（其声明的验证命令即 cd frontend && npm run test -- --run）。Windows 等价命令说明：backend 用 .venv/Scripts/python.exe（uv 在 WSL bash 不可用）。"
     },
     {
       "id": "M0-BOOT-001",
