@@ -19,7 +19,7 @@ LiteMCP 旨在将已有 HTTP API、远程 MCP Server 和 FastMCP/STDIO 代码包
 </div>
 
 > [!IMPORTANT]
-> **当前状态：早期实现脚手架。** 仓库目前仅包含 FastAPI 基础应用、存活/就绪检查接口以及 React/HeroUI 前端模板。MCP 网关、三类 Connector、认证授权、原子发布、沙箱运行和完整部署栈尚未实现，LiteMCP 目前不能用于生产环境。
+> **当前状态：基础工程已完成，产品能力尚未开始。** 仓库现已包含真实可用的 FastAPI 应用（带类型化配置、健康检查）、支持 PostgreSQL/MySQL 跨方言类型和 Alembic 迁移的异步数据库层、Docker Compose 本地部署栈，以及跟踪已验证进度的项目治理机制（`feature_list.json` / `progress.md`）。领域模型、MCP 网关、三类 Connector、认证授权、原子发布和沙箱运行尚未实现，前端仍是原始 React/HeroUI 模板。LiteMCP 目前不能用于生产环境。
 
 ## 项目状态
 
@@ -27,13 +27,14 @@ LiteMCP 旨在将已有 HTTP API、远程 MCP Server 和 FastMCP/STDIO 代码包
 | --- | --- | --- |
 | 架构与安全设计 | **已完成内部评审** | 设计文档覆盖控制面、数据面、构建面、数据模型、认证、沙箱和验证策略；实现与生产安全验证仍未完成 |
 | 产品与 UI/UX 设计 | **已完成内部评审** | 信息架构和核心用户流程已有文档化评审基线 |
-| 后端基础 | **开发中** | FastAPI 包以及存活/就绪检查端点已经存在 |
+| 工程基础（M0） | **已完成** | 类型化配置与快速失败校验、`/livez` + `/readyz`、根目录 `Makefile`（`test`/`lint`/`build`/`validate-*`）、覆盖数据库/Redis/后端/worker/前端的 `docker-compose.yml`，以及 ADR 体系——15 项基础特性全部通过验证 |
+| 数据层（M1） | **开发中** | 异步会话工厂、跨方言基础类型和 Alembic 迁移体系已通过验证（17 项中的 3 项）；用户/服务/工具集/构建产物/审计事件等领域模型、秘密加密和 API Key 存储尚未开始 |
 | 管理控制台 | **仅有脚手架** | 当前前端仍是原始 React/HeroUI 模板，并非 LiteMCP 产品界面 |
 | HTTP API Connector | **规划中** | 计划作为第一条端到端服务纵向切片 |
 | Remote MCP Connector | **规划中** | 计划在统一网关和发布基础能力之后实现 |
 | STDIO 沙箱 | **规划中** | 计划覆盖隔离构建、探测、运行和清理生命周期 |
 
-架构文档描述的是目标系统，并不代表其中的能力已经在当前仓库中实现。
+架构文档描述的是目标系统，并不代表其中的能力已经在当前仓库中实现。`feature_list.json` 和 `progress.md` 才是已通过验证内容的权威、实时记录。
 
 ## 一个网关，接入所有 MCP 服务
 
@@ -128,11 +129,30 @@ flowchart LR
 
 ## 快速开始
 
-当前脚手架可以通过两个本地开发进程运行。
+### 方式一：Docker Compose
 
-### 后端
+环境要求：Docker 与 Compose v2。
 
-环境要求：Python 3.11+ 和 [uv](https://docs.astral.sh/uv/)。
+```bash
+docker compose up -d --wait
+```
+
+该命令会启动 PostgreSQL、Redis、后端（`/livez`、`/readyz`）、占位 worker 和前端开发服务器。`docker-compose.yml` 中的每个 `${VAR}` 都带有内联默认值，因此无需 `.env` 文件即可运行；如需覆盖端口或密钥，可复制 [.env.example](.env.example) 为 `.env`。
+
+### 方式二：根目录 Makefile
+
+环境要求：GNU Make、Python 3.11+ 与 [uv](https://docs.astral.sh/uv/)、以及带 npm 的 Node.js。
+
+```bash
+make help    # 列出所有目标
+make test    # 后端 pytest（前端 vitest 接入后一并运行）
+make lint    # 后端 ruff + 前端 eslint
+make build   # 后端 compileall + 前端 tsc/vite build
+```
+
+### 方式三：直接运行各服务
+
+**后端**（Python 3.11+ 和 [uv](https://docs.astral.sh/uv/)）：
 
 ```bash
 cd backend
@@ -140,14 +160,12 @@ uv sync
 uv run uvicorn litemcp.main:app --reload
 ```
 
-当前后端提供：
+后端提供：
 
-- `GET http://127.0.0.1:8000/livez`
-- `GET http://127.0.0.1:8000/readyz`
+- `GET http://127.0.0.1:8000/livez`——仅反映进程存活状态
+- `GET http://127.0.0.1:8000/readyz`——真实探测数据库与 Redis 依赖
 
-### 前端
-
-环境要求：当前受支持的 Node.js 版本与 npm。
+**前端**（当前受支持的 Node.js 版本与 npm）：
 
 ```bash
 cd frontend
@@ -159,7 +177,7 @@ npm run dev
 
 ## 路线图
 
-- [ ] **工程基础**——配置、数据库模型、迁移、安全原语和生产级应用生命周期
+- [x] **工程基础**——配置、Makefile、Compose 部署栈、ADR、健康检查、异步数据库层、跨方言类型和 Alembic 迁移已完成；领域模型与安全原语（M1）开发中
 - [ ] **管理控制面**——认证、对象级授权、服务市场和运维控制台壳层
 - [ ] **HTTP API 纵向切片**——完成工具的创建、发布、授权、列出和调用闭环
 - [ ] **Remote MCP**——安全地同步和代理远程 MCP Server，并支持版本切换

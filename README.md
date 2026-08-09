@@ -19,7 +19,7 @@ English | [简体中文](README.zh-CN.md)
 </div>
 
 > [!IMPORTANT]
-> **Current state: early implementation scaffold.** The repository currently contains a basic FastAPI application, liveness/readiness endpoints, and a React/HeroUI frontend template. The MCP gateway, connectors, authentication and authorization, atomic publication, sandbox runtime, and complete deployment stack are not yet implemented. LiteMCP is not ready for production use.
+> **Current state: early foundation, no product features yet.** The repository has a real FastAPI application with typed configuration, health checks, an async database layer with cross-dialect (PostgreSQL/MySQL) types and Alembic migrations, a Docker Compose local stack, and a project harness (`feature_list.json` / `progress.md`) that tracks verified progress. Domain models, the MCP gateway, connectors, authentication and authorization, atomic publication, and the sandbox runtime are not yet implemented, and the frontend is still the original React/HeroUI template. LiteMCP is not ready for production use.
 
 ## Project status
 
@@ -27,13 +27,14 @@ English | [简体中文](README.zh-CN.md)
 | --- | --- | --- |
 | Architecture and security design | **Internally reviewed** | Design documents cover the control/data/build planes, data model, authentication, sandbox, and verification strategy; implementation and production security validation remain pending |
 | Product and UI/UX design | **Internally reviewed** | Information architecture and core workflows have a documented review baseline |
-| Backend foundation | **In progress** | FastAPI package and liveness/readiness endpoints exist |
+| Project foundation (M0) | **Complete** | Typed config with fail-fast validation, `/livez` + `/readyz`, root `Makefile` (`test`/`lint`/`build`/`validate-*`), `docker-compose.yml` for database/redis/backend/worker/frontend, and an ADR set — all 15 foundation features passing |
+| Data layer (M1) | **In progress** | Async session factory, cross-dialect base types, and an Alembic migration system are passing (3 of 17 features); domain models (users, services, toolsets, artifacts, audit/outbox), secret encryption, and API key storage are not started |
 | Management console | **Scaffold only** | The current frontend is the original React/HeroUI template, not a LiteMCP product UI |
 | HTTP API connector | **Planned** | Intended as the first end-to-end service slice |
 | Remote MCP connector | **Planned** | Intended to follow the shared gateway and publication foundation |
 | STDIO sandbox | **Planned** | Intended to cover isolated build, probe, runtime, and cleanup lifecycles |
 
-The architecture documents describe the intended system, not functionality already available in the repository.
+The architecture documents describe the intended system, not functionality already available in the repository. `feature_list.json` and `progress.md` are the authoritative, up-to-date record of what has actually passed verification.
 
 ## One gateway for every MCP service
 
@@ -128,11 +129,30 @@ Read the [architecture overview](docs/architecture/00-overview.md) for the compl
 
 ## Quick start
 
-The current scaffold can be run as two local development processes.
+### Option A: Docker Compose
 
-### Backend
+Requirements: Docker with Compose v2.
 
-Requirements: Python 3.11+ and [uv](https://docs.astral.sh/uv/).
+```bash
+docker compose up -d --wait
+```
+
+This starts PostgreSQL, Redis, the backend (`/livez`, `/readyz`), a placeholder worker, and the frontend dev server. Every `${VAR}` in `docker-compose.yml` has an inline default, so it runs without a `.env` file; copy [.env.example](.env.example) to `.env` to override ports or secrets.
+
+### Option B: Root Makefile
+
+Requirements: GNU Make, Python 3.11+ with [uv](https://docs.astral.sh/uv/), and Node.js with npm.
+
+```bash
+make help    # list all targets
+make test    # backend pytest (+ frontend vitest once wired)
+make lint    # backend ruff + frontend eslint
+make build   # backend compileall + frontend tsc/vite build
+```
+
+### Option C: Run services directly
+
+**Backend** (Python 3.11+ and [uv](https://docs.astral.sh/uv/)):
 
 ```bash
 cd backend
@@ -140,14 +160,12 @@ uv sync
 uv run uvicorn litemcp.main:app --reload
 ```
 
-The current backend exposes:
+The backend exposes:
 
-- `GET http://127.0.0.1:8000/livez`
-- `GET http://127.0.0.1:8000/readyz`
+- `GET http://127.0.0.1:8000/livez` — process liveness only
+- `GET http://127.0.0.1:8000/readyz` — real database + Redis dependency probes
 
-### Frontend
-
-Requirements: a current Node.js release with npm.
+**Frontend** (a current Node.js release with npm):
 
 ```bash
 cd frontend
@@ -159,7 +177,7 @@ npm run dev
 
 ## Roadmap
 
-- [ ] **Foundation** — configuration, database model, migrations, security primitives, and production-ready application lifecycle
+- [x] **Foundation** — configuration, Makefile, Compose stack, ADRs, health checks, async DB layer, cross-dialect types, and Alembic migrations are complete; domain models and security primitives (M1) are in progress
 - [ ] **Management plane** — authentication, object-level authorization, service catalog, and operations console shell
 - [ ] **HTTP API vertical slice** — create, publish, authorize, list, and call tools end to end
 - [ ] **Remote MCP** — synchronize and proxy remote MCP servers with safe revision changes
