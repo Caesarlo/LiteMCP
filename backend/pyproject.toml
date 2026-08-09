@@ -3,6 +3,7 @@ name = "litemcp"
 version = "0.1.0"
 description = "LiteMCP — MCP gateway and service marketplace backend"
 readme = "README.md"
+license = "MIT"
 authors = [
     { name = "GUMP", email = "350960338@qq.com" }
 ]

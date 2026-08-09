@@ -9,6 +9,7 @@
 [English](README.md) | [简体中文](README.zh-CN.md)
 
 [![开发状态](https://img.shields.io/badge/status-active%20development-f59e0b)](#项目状态)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](backend/pyproject.toml)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](frontend/package.json)
 [![MCP](https://img.shields.io/badge/Model%20Context%20Protocol-2025--11--25-6D5CE7)](https://modelcontextprotocol.io/)
@@ -189,4 +190,4 @@ LiteMCP 尚不接受生产部署，但欢迎参与架构评审、提交问题和
 
 ## 许可证
 
-仓库目前尚未声明项目级许可证。根许可证文件将在首次公开发布前补充。
+LiteMCP 基于 [MIT 许可证](LICENSE) 开源。

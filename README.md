@@ -9,6 +9,7 @@ Stop writing a new MCP server for every HTTP API. Describe it once, and LiteMCP 
 English | [简体中文](README.zh-CN.md)
 
 [![Development Status](https://img.shields.io/badge/status-active%20development-f59e0b)](#project-status)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.11%2B-3776AB?logo=python&logoColor=white)](backend/pyproject.toml)
 [![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=black)](frontend/package.json)
 [![MCP](https://img.shields.io/badge/Model%20Context%20Protocol-2025--11--25-6D5CE7)](https://modelcontextprotocol.io/)
@@ -189,4 +190,4 @@ LiteMCP is not yet accepting production deployments, but architecture reviews, i
 
 ## License
 
-The repository does not currently declare a project-wide license. A root license will be added before the first public release.
+LiteMCP is licensed under the [MIT License](LICENSE).
