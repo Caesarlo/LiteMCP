@@ -1,0 +1,1329 @@
+{
+  "project": "LiteMCP",
+  "schema_version": "1.0",
+  "last_updated": "2026-08-09",
+  "rules": {
+    "single_active_feature": true,
+    "passing_requires_evidence": true,
+    "do_not_skip_verification": true,
+    "feature_should_fit_one_session": true,
+    "passing_is_monotonic": true
+  },
+  "rule_exceptions": {
+    "feature_should_fit_one_session": "area:\"planning\" features (ids matching *-SCOPE-001) are deliberately exempt: they exist only to be decomposed into session-sized features before implementation of that milestone begins, and must never be marked passing themselves."
+  },
+  "status_legend": {
+    "not_started": "Work has not begun.",
+    "in_progress": "The feature is the only active implementation task.",
+    "blocked": "A documented blocker prevents progress.",
+    "passing": "Required behavior and verification have passed with evidence."
+  },
+  "milestones": [
+    {
+      "id": "M0",
+      "title": "工程、契约与本地运行基线",
+      "objective": "建立可重复启动、验证和协作的工程基础。"
+    },
+    {
+      "id": "M1",
+      "title": "数据模型、迁移与安全原语",
+      "objective": "建立双方言数据层、不可变版本模型和共享安全基础。"
+    },
+    {
+      "id": "M2",
+      "title": "管理鉴权、授权与前端壳",
+      "objective": "交付安全的管理入口、对象级授权和控制台基础体验。"
+    },
+    {
+      "id": "M3",
+      "title": "发布内核、Worker 可靠性与 Agent 网关骨架",
+      "objective": "建立不可变发布、异步任务和 MCP 数据面骨架。"
+    },
+    {
+      "id": "M4",
+      "title": "HTTP API 纵向切片",
+      "objective": "完成 HTTP API 从创建到 Agent 调用的首条端到端闭环。"
+    },
+    {
+      "id": "M5",
+      "title": "Remote MCP 纵向切片",
+      "objective": "安全同步和代理远程 MCP Server。"
+    },
+    {
+      "id": "M6",
+      "title": "STDIO 上传、构建与运行",
+      "objective": "在加固沙箱中构建、探测并运行 FastMCP 代码包。"
+    },
+    {
+      "id": "M7",
+      "title": "前端体验、可观测与运维闭环",
+      "objective": "补齐管理体验、安全治理与生产可观测能力。"
+    },
+    {
+      "id": "M8",
+      "title": "发布候选、演练与渐进交付",
+      "objective": "完成生产发布证据、恢复演练与渐进交付。"
+    }
+  ],
+  "features": [
+    {
+      "id": "M0-HARNESS-001",
+      "priority": 1,
+      "milestone": "M0",
+      "area": "harness",
+      "title": "建立机器可读功能清单",
+      "behavior": "仓库根目录存在有效的 feature_list.json，所有功能都包含行为、状态和验证定义。",
+      "status": "passing",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "node -e \"const f=require('./feature_list.json'); if(!Array.isArray(f.features)||!f.features.length) process.exit(1)\"",
+          "expected": "JSON 可解析且 features 非空"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "node structural feature-list validator",
+          "result": "141 features and 9 milestones parsed; IDs, required fields, statuses, dependencies, and dependency cycles validated with zero errors.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [
+          "feature_list.json"
+        ],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-HARNESS-002",
+      "priority": 2,
+      "milestone": "M0",
+      "area": "harness",
+      "title": "建立跨对话进度日志",
+      "behavior": "仓库根目录存在 progress.md，并包含当前状态、会话日志、关键检查点和下一步。",
+      "status": "passing",
+      "dependencies": [
+        "M0-HARNESS-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "powershell -Command \"if (-not (Select-String -Path progress.md -Pattern 'Current Verified State')) { exit 1 }\"",
+          "expected": "进度日志包含规定章节"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "PowerShell progress section and checkpoint validator",
+          "result": "All required sections were present with 1 session and 6 checkpoints.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [
+          "progress.md"
+        ],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-HARNESS-003",
+      "priority": 3,
+      "milestone": "M0",
+      "area": "harness",
+      "title": "固化 Agent 启停与通过门禁",
+      "behavior": "项目 AGENTS.md 要求每轮读取功能清单和进度日志，并禁止无证据标记 passing。",
+      "status": "passing",
+      "dependencies": [
+        "M0-HARNESS-001",
+        "M0-HARNESS-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "powershell -Command \"if (-not (Select-String -Path AGENTS.md -Pattern 'passing requires')) { exit 1 }\"",
+          "expected": "项目规则包含启动、执行和结束协议"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "PowerShell AGENTS.md rule validator",
+          "result": "All 9 required startup, state, evidence, checkpoint, CodeGraph, exit, and clean-state rules were present.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [
+          "AGENTS.md"
+        ],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-HARNESS-004",
+      "priority": 4,
+      "milestone": "M0",
+      "area": "harness",
+      "title": "固化校验脚本、门禁与粒度校准",
+      "behavior": "仓库提供可重复运行的 feature_list.json 结构校验脚本，可选 pre-commit 钩子接入该脚本，安全类 feature 的验证描述包含明确负向用例，M2 及以后里程碑的细粒度 feature 折叠为待拆分占位条目以降低先于实现的规划维护成本。",
+      "status": "passing",
+      "dependencies": [
+        "M0-HARNESS-001",
+        "M0-HARNESS-002",
+        "M0-HARNESS-003"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "node scripts/validate-feature-list.js",
+          "expected": "结构校验通过：唯一 ID、依赖存在、无依赖环、必填字段齐全、至多一个 in_progress、passing 均有 evidence"
+        }
+      ],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "37 features across 9 milestones (30 kept from M0/M1, 7 SCOPE placeholders for M2-M8) validated with zero structural errors.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [
+          "scripts/validate-feature-list.js",
+          ".githooks/pre-commit",
+          "feature_list.json",
+          "AGENTS.md"
+        ],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "触发原因：对照 learn-harness-engineering 参考课程的审查发现三处偏离——校验逻辑未固化为仓库产物、passing 门禁仅靠文字约定、M2 以后里程碑一次性铺开 141 条细粒度 feature 使后续架构调整的维护成本过高。"
+    },
+    {
+      "id": "M0-ENV-001",
+      "priority": 10,
+      "milestone": "M0",
+      "area": "engineering",
+      "title": "定义后端配置加载",
+      "behavior": "后端从环境变量加载类型安全配置，并对缺失的必需配置快速失败。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/core/test_config.py",
+          "expected": "配置默认值与缺失配置测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-ENV-002",
+      "priority": 11,
+      "milestone": "M0",
+      "area": "engineering",
+      "title": "提供环境变量示例",
+      "behavior": "开发者可以从 .env.example 了解数据库、Redis、密钥、存储和网关配置。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-ENV-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make validate-env-example",
+          "expected": "示例覆盖所有必需配置且不含真实秘密"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-CMD-001",
+      "priority": 12,
+      "milestone": "M0",
+      "area": "engineering",
+      "title": "建立根 Makefile 统一入口",
+      "behavior": "根目录提供 make test、lint、build、test-postgres、test-mysql 和 test-db-matrix。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make help",
+          "expected": "规定的统一命令全部可发现"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-BOOT-001",
+      "priority": 13,
+      "milestone": "M0",
+      "area": "engineering",
+      "title": "建立本地 Compose 编排",
+      "behavior": "开发者可通过 Compose 启动 database、redis、backend、worker 和 frontend。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-ENV-001",
+        "M0-ENV-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "docker compose config",
+          "expected": "Compose 配置解析成功且服务齐全"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-BE-001",
+      "priority": 14,
+      "milestone": "M0",
+      "area": "backend",
+      "title": "验证后端存活检查",
+      "behavior": "GET /livez 在进程存活时返回 200 和稳定响应结构。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/api/test_health.py -k livez",
+          "expected": "livez 契约测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-BE-002",
+      "priority": 15,
+      "milestone": "M0",
+      "area": "backend",
+      "title": "验证后端就绪检查",
+      "behavior": "GET /readyz 根据数据库和 Redis 依赖状态返回真实就绪结果。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-ENV-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/api/test_health.py -k readyz",
+          "expected": "正常与依赖故障测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-BE-003",
+      "priority": 16,
+      "milestone": "M0",
+      "area": "backend",
+      "title": "建立关联 ID 中间件",
+      "behavior": "每个管理和网关请求都获得可传播的 request_id/correlation_id。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/middleware/test_correlation.py",
+          "expected": "请求头、响应头和上下文传播测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-FE-001",
+      "priority": 17,
+      "milestone": "M0",
+      "area": "frontend",
+      "title": "建立前端测试脚手架",
+      "behavior": "前端具备 Vitest、RTL 和 MSW 基础配置，并可运行最小组件测试。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd frontend && npm run test -- --run",
+          "expected": "前端测试命令成功"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-CONTRACT-001",
+      "priority": 18,
+      "milestone": "M0",
+      "area": "contracts",
+      "title": "建立 OpenAPI 快照门禁",
+      "behavior": "管理 API 的 OpenAPI 文档可以生成快照并检测非预期破坏性变化。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-BE-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-openapi",
+          "expected": "OpenAPI 快照测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M0-CI-001",
+      "priority": 19,
+      "milestone": "M0",
+      "area": "engineering",
+      "title": "建立基础 CI 门禁",
+      "behavior": "CI 执行后端 lint/type/unit 与前端 lint/type/unit/build。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-CMD-001",
+        "M0-FE-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make ci-fast",
+          "expected": "本地等价快速门禁全部通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/00-overview.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-DB-001",
+      "priority": 100,
+      "milestone": "M1",
+      "area": "data",
+      "title": "建立异步数据库会话工厂",
+      "behavior": "每个请求或任务获得独立 SQLAlchemy AsyncSession，并能可靠释放。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-ENV-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/db/test_session.py",
+          "expected": "会话隔离和释放测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-DB-002",
+      "priority": 101,
+      "milestone": "M1",
+      "area": "data",
+      "title": "定义跨方言基础类型",
+      "behavior": "ID、UTC 时间、JSON 文档和密文字段在 PostgreSQL 与 MySQL 行为一致。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-DB-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-types",
+          "expected": "双方言类型契约通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-DB-003",
+      "priority": 102,
+      "milestone": "M1",
+      "area": "data",
+      "title": "初始化 Alembic 迁移体系",
+      "behavior": "迁移仓库只有一个 head，支持全新数据库升级到最新版本。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-DB-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-migrations",
+          "expected": "Alembic 单 head 和 fresh upgrade 通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-001",
+      "priority": 103,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现用户与团队模型",
+      "behavior": "用户、团队、成员关系和生命周期字段满足双方言约束。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-DB-002",
+        "M1-DB-003"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_user_team",
+          "expected": "双方言模型契约通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-002",
+      "priority": 104,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现服务模型",
+      "behavior": "服务保存类型、归属、期望状态、generation 和活动版本指针。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-DB-002",
+        "M1-DB-003"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_service",
+          "expected": "服务约束和索引测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-003",
+      "priority": 105,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现配置 Revision 模型",
+      "behavior": "服务配置采用不可变 revision，并保存加密配置与内容摘要。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_config_revision",
+          "expected": "不可变性和归属约束通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-004",
+      "priority": 106,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现 Toolset 与 Tool 模型",
+      "behavior": "候选、活动、退役和拒绝工具集可保存完整 MCP Tool Schema。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_toolset",
+          "expected": "状态、外键和 Schema 保存测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-005",
+      "priority": 107,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现 Artifact 与 Build 模型",
+      "behavior": "代码包、构建产物、摘要、状态和日志引用能够持久化。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_artifact_build",
+          "expected": "制品与构建约束通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-006",
+      "priority": 108,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现 Operation 与 Runtime Condition 模型",
+      "behavior": "异步操作进度和真实运行条件独立于用户期望配置保存。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_operation_condition",
+          "expected": "状态边界与时间字段测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-007",
+      "priority": 109,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现权限与 API Key 元数据模型",
+      "behavior": "对象级权限和 API Key 摘要、前缀、到期及撤销状态可持久化。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-001",
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_permission_key",
+          "expected": "唯一性和撤销约束通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-MODEL-008",
+      "priority": 110,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现审计事件与 Outbox 模型",
+      "behavior": "业务变更和对应审计事件可以在同一事务中可靠记录。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-DB-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=models_audit_outbox",
+          "expected": "事务一致性测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-SEC-001",
+      "priority": 111,
+      "milestone": "M1",
+      "area": "security",
+      "title": "实现版本化秘密加密",
+      "behavior": "服务秘密通过 MultiFernet 加密，支持当前密钥解密和旧密钥轮换。负向：用已轮换掉的旧密钥单独解密必须失败；密文不得包含可逆的明文子串；缺失当前密钥时启动必须快速失败而不是静默用旧密钥当前密钥。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-ENV-001"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/security/test_encryption.py",
+          "expected": "加解密、错误密钥和轮换测试通过"
+        },
+        {
+          "type": "manual",
+          "command": "审查测试用例是否覆盖 behavior 字段中列出的全部负向用例",
+          "expected": "behavior 中的每条负向用例都有对应测试且失败路径符合预期，而非仅验证正向加解密往返"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-SEC-002",
+      "priority": 112,
+      "milestone": "M1",
+      "area": "security",
+      "title": "实现 API Key 摘要存储",
+      "behavior": "API Key 明文仅创建时返回，数据库只保存不可逆摘要与安全前缀。负向：数据库行、日志、审计事件、异常堆栈中都不得出现明文；重复请求同一创建接口不得返回同一明文两次；摘要校验必须使用常量时间比较。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-007"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/security/test_api_key_hash.py",
+          "expected": "明文不落库且校验行为正确"
+        },
+        {
+          "type": "manual",
+          "command": "审查测试用例是否覆盖 behavior 字段中列出的全部负向用例",
+          "expected": "behavior 中的每条负向用例都有对应测试，而非仅验证摘要能校验成功"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-SEC-003",
+      "priority": 113,
+      "milestone": "M1",
+      "area": "security",
+      "title": "建立统一秘密脱敏器",
+      "behavior": "日志、异常、审计和对象 repr 不输出密码、Token、Key 或连接秘密。负向：脱敏必须在异常被未捕获时（如中间件兜底 500 响应）依然生效；嵌套在自定义异常 __cause__/__context__ 链中的秘密也必须被脱敏；脱敏器本身抛错时不得回退为输出原始值。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/security/test_redaction.py",
+          "expected": "秘密 canary 未出现在输出中"
+        },
+        {
+          "type": "manual",
+          "command": "审查测试用例是否覆盖 behavior 字段中列出的全部负向用例",
+          "expected": "behavior 中的每条负向用例都有对应测试，而非仅验证正常路径的日志调用被脱敏"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-STORAGE-001",
+      "priority": 114,
+      "milestone": "M1",
+      "area": "storage",
+      "title": "定义 StorageBackend 契约",
+      "behavior": "文件系统与未来 S3 实现共享 put/get/delete/digest 契约。",
+      "status": "not_started",
+      "dependencies": [],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "cd backend && uv run pytest tests/storage/test_contract.py",
+          "expected": "存储契约测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-CONC-001",
+      "priority": 115,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现 row_version 乐观锁",
+      "behavior": "管理写入携带版本，陈旧写入返回冲突且不覆盖新数据。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=optimistic_lock",
+          "expected": "双方言并发测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M1-DELETE-001",
+      "priority": 116,
+      "milestone": "M1",
+      "area": "data",
+      "title": "实现软删除与保留规则",
+      "behavior": "服务软删除不破坏历史 revision、toolset、audit 和归属查询。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-002",
+        "M1-MODEL-006"
+      ],
+      "verification": [
+        {
+          "type": "automated",
+          "command": "make test-db-contract TEST=soft_delete",
+          "expected": "删除、恢复和唯一性测试通过"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": ""
+    },
+    {
+      "id": "M2-SCOPE-001",
+      "priority": 200,
+      "milestone": "M2",
+      "area": "planning",
+      "title": "M2 范围占位（待拆分）：管理鉴权、授权与前端壳",
+      "behavior": "本条目是 M2（管理鉴权、授权与前端壳）在 2026-08-09 从 18 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M2-AUTH-001] 实现首个管理员初始化: 空数据库只能通过受控引导流程创建首个全局管理员。\n- [M2-AUTH-002] 实现 Argon2id 密码存储: 新密码使用配置化 Argon2id 参数哈希，验证时采用常量时间路径。\n- [M2-AUTH-003] 升级兼容的 bcrypt 密码: 旧 bcrypt 用户成功登录后自动升级为 Argon2id，失败登录不修改摘要。\n- [M2-AUTH-004] 实现登录成功契约: 有效凭据返回短期 Access JWT 并建立 Refresh Session。\n- [M2-AUTH-005] 实现登录失败锁定: 连续失败达到阈值后账户按规定时间锁定，成功登录重置计数。\n- [M2-AUTH-006] 实现 Access JWT 校验: 管理接口验证签名、issuer、audience、过期时间和用户有效状态。\n- [M2-AUTH-007] 实现 Refresh Token 轮换: 每次刷新签发新 Token 并原子撤销旧 Token。\n- [M2-AUTH-008] 检测 Refresh Token 重放: 被轮换的 Refresh Token 再次出现时撤销对应会话族并记录安全事件。\n- [M2-AUTH-009] 实现登出与会话撤销: 用户可以撤销当前或全部 Refresh Session，后续刷新失败。\n- [M2-WEB-001] 实施 CSRF 与 Origin 防护: 所有依赖 Cookie 的管理写操作必须同时通过 CSRF 和允许 Origin 校验。\n- [M2-RBAC-001] 实现全局角色授权: 全局 admin 与普通用户只能访问各自允许的管理能力。\n- [M2-RBAC-002] 实现服务对象级授权: 服务 owner、editor、viewer 权限在读取和写入端点统一执行。\n- [M2-STEPUP-001] 实现敏感操作 Step-up: 创建密钥、调整权限和高风险配置要求近期重新认证。\n- [M2-AUTH-010] 定义 Redis 鉴权故障语义: Refresh Session 依赖 Redis 时故障必须 fail-closed 并可观测。\n- [M2-FE-001] 实现控制台路由壳层: 登录后显示侧边栏、顶部栏和受保护路由，替换 HeroUI 示例页面。\n- [M2-FE-002] 实现登录页面状态: 登录页覆盖空闲、提交、错误、锁定和恢复状态，并提供可访问反馈。\n- [M2-FE-003] 实现会话恢复与单飞刷新: 页面加载和 401 时只发起一次 Refresh，并正确重放允许的查询。\n- [M2-FE-004] 实现跨 Tab 会话协调: 多个 Tab 通过 Web Locks 或 BroadcastChannel 协调刷新、登录和登出。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-FE-001",
+        "M1-MODEL-001",
+        "M1-MODEL-007",
+        "M1-SEC-003"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/02-admin-auth.md",
+        "docs/architecture/06-frontend.md",
+        "docs/UI_UX_PLAN.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 18 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M3-SCOPE-001",
+      "priority": 300,
+      "milestone": "M3",
+      "area": "planning",
+      "title": "M3 范围占位（待拆分）：发布内核、Worker 可靠性与 Agent 网关骨架",
+      "behavior": "本条目是 M3（发布内核、Worker 可靠性与 Agent 网关骨架）在 2026-08-09 从 17 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M3-REV-001] 创建不可变配置 Revision: 每次有效配置修改创建新 revision 并令服务 generation 加一。\n- [M3-PUB-001] 创建候选 Toolset: Connector 只能创建 staging 候选工具集，不能直接修改活动指针。\n- [M3-PUB-002] 校验完整 MCP Tool Schema: 候选工具保存并验证 MCP Tool Schema 与 JSON Schema 2020-12。\n- [M3-PUB-003] 拒绝不兼容候选工具集: 候选任一工具校验失败时整个 Toolset 进入 rejected。\n- [M3-PUB-004] 原子发布活动 Toolset: 发布事务通过 CAS 一次切换 active_toolset_id，并退役旧版本。\n- [M3-PUB-005] 阻止过期任务覆盖新配置: 后台任务只能提交收到的 generation，旧任务完成时标记 superseded。\n- [M3-PUB-006] 实现安全回退: 同一服务的保留 Toolset 经当前策略复验后可原子恢复为 active。\n- [M3-WORKER-001] 实现可认领异步任务: Worker 可以租约式认领任务，崩溃后任务可被安全重新认领。\n- [M3-WORKER-002] 实现任务幂等与重试: 相同幂等键不会产生重复副作用，重试遵循上限和退避。\n- [M3-WORKER-003] 实现任务取消: 待执行和运行中任务可取消，并产生稳定终止状态。\n- [M3-OUTBOX-001] 可靠投递审计 Outbox: 事务内 Outbox 能被 Worker 至少一次投递且消费者去重。\n- [M3-GW-001] 建立 MCP Streamable HTTP 入口: /mcp/{service_id} 使用官方 SDK 完成 initialize 生命周期。\n- [M3-GW-002] 实现 MCP Session 生命周期: Session 创建、续期、关闭和未知 Session 错误符合协议。\n- [M3-GW-003] 实现服务可用性门禁: 网关在鉴权前拒绝不存在、删除、禁用或无活动版本的服务。\n- [M3-GW-004] 定义统一 Connector 契约: 三类 Connector 共享 list_tools、call_tool、cancel 和 close 边界。\n- [M3-FLAG-001] 建立类型化 Feature Flag 注册表: 每个 Flag 声明 owner、默认值、环境限制、到期条件和安全降级值。\n- [M3-GW-005] 按能力动态声明 MCP Capability: 只有代码、配置、依赖和服务能力均满足时才向客户端声明 Capability。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-BE-003",
+        "M0-ENV-001",
+        "M1-CONC-001",
+        "M1-MODEL-002",
+        "M1-MODEL-003",
+        "M1-MODEL-004",
+        "M1-MODEL-006",
+        "M1-MODEL-008"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/01-data-model.md",
+        "docs/architecture/05-agent-gateway.md",
+        "docs/architecture/08-implementation-plan.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 17 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M4-SCOPE-001",
+      "priority": 400,
+      "milestone": "M4",
+      "area": "planning",
+      "title": "M4 范围占位（待拆分）：HTTP API 纵向切片",
+      "behavior": "本条目是 M4（HTTP API 纵向切片）在 2026-08-09 从 19 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M4-SVC-001] 创建 HTTP API 服务: 有权限的管理员可以用分型 Schema 创建 http_api 服务及首个配置 revision。\n- [M4-SVC-002] 读取 HTTP API 服务详情: 授权用户可读取服务、活动版本和运行状态，秘密字段始终脱敏。\n- [M4-SVC-003] 更新 HTTP API 服务配置: 更新使用 row_version 和幂等键创建新 revision，陈旧请求返回 409。\n- [M4-SVC-004] 删除与恢复 HTTP API 服务: 软删除立即阻止 Agent 访问，保留期内可由授权用户恢复。\n- [M4-TOOL-001] 创建人工 MCP Tool: 管理员可提交名称、描述、inputSchema、outputSchema 和 HTTP Binding。\n- [M4-TOOL-002] 校验工具名称唯一性: 同一候选 Toolset 内工具名称唯一，冲突返回稳定字段级错误。\n- [M4-TOOL-003] 校验 HTTP Binding 参数映射: 路径、查询、Header 和 Body 映射只能引用 Tool Schema 中存在的输入。\n- [M4-TOOL-004] 校验 HTTP 方法与 Body 规则: HTTP 方法、Content-Type 和请求体组合遵守确定性 Binding 规则。\n- [M4-SSRF-001] 拒绝危险目标 URL: URL 策略拒绝 loopback、link-local、私网、非允许协议和带用户信息的目标。\n- [M4-SSRF-002] 逐跳验证 DNS 与重定向: 每次解析和重定向都重新执行 SSRF、TLS、端口和出网策略。\n- [M4-CRED-001] 安全注入下游凭据: Connector 在发出请求前注入加密凭据，Schema、日志和响应中不可见。\n- [M4-CALL-001] 执行 HTTP Tool 调用: 合法 tools/call 输入被确定性映射为下游 HTTP 请求并返回 MCP 结果。\n- [M4-CALL-002] 校验调用输入 Schema: 无效工具参数在访问网络前返回 MCP 参数错误。\n- [M4-CALL-003] 校验下游响应 Schema: 配置 outputSchema 时不匹配的下游响应返回受控 Connector 错误。\n- [M4-KEY-001] 创建服务级 API Key: 有权限且通过 Step-up 的用户可创建只显示一次的服务 API Key。\n- [M4-KEY-002] 校验与撤销 Agent API Key: 网关接受有效 Key，并在到期、撤销或服务不匹配时返回统一未授权错误。\n- [M4-LIMIT-001] 实现服务与 Key 两级限流: 网关通过 Redis Lua 原子执行服务级和 Key 级令牌桶。\n- [M4-LIMIT-002] 实现限流故障降级: Redis 限流连续失败时仅限流 fail-open，鉴权不降级，并输出告警信号。\n- [M4-E2E-001] 验证 HTTP API 完整闭环: 创建、发布、生成 Key、initialize、list、call、429 和撤销 401 形成真实端到端路径。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-CONC-001",
+        "M1-DELETE-001",
+        "M1-SEC-001",
+        "M1-SEC-002",
+        "M1-SEC-003",
+        "M2-SCOPE-001",
+        "M3-SCOPE-001"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/03-service-crud.md",
+        "docs/architecture/05-agent-gateway.md",
+        "docs/UI_UX_PLAN.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 19 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M5-SCOPE-001",
+      "priority": 500,
+      "milestone": "M5",
+      "area": "planning",
+      "title": "M5 范围占位（待拆分）：Remote MCP 纵向切片",
+      "behavior": "本条目是 M5（Remote MCP 纵向切片）在 2026-08-09 从 12 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M5-SVC-001] 创建 Remote MCP 服务: 管理员提交远端 URL 与凭据后获得 202 operation，不在请求事务中执行网络同步。\n- [M5-SYNC-001] 建立远端 MCP Client Session: 同步 Worker 使用官方 SDK 完成 initialize，并遵守超时与协议版本策略。\n- [M5-SYNC-002] 同步远端工具列表: tools/list 结果完整保留 Schema、描述和未知 _meta 扩展到候选 Toolset。\n- [M5-SYNC-003] 原子发布同步结果: 完整远端工具集验证成功后才能切换活动指针，失败继续服务旧版本。\n- [M5-SYNC-004] 报告同步 Operation 进度: 管理端可读取 queued、connecting、listing、validating、published 或 failed 进度。\n- [M5-CALL-001] 代理远端 Tool 调用: 网关把 tools/call 转发至活动远端 revision 并保持 MCP 错误语义。\n- [M5-CALL-002] 避免非幂等 Tool 自动重放: 远端 Session 重建不得自动重放结果未知的 tools/call。\n- [M5-BREAKER-001] 实现远端熔断器: 连续远端失败触发服务 revision 级熔断，半开探测成功后恢复。\n- [M5-DRAIN-001] 排空旧远端 Revision: 切换 active revision 后新请求进入新 Session，旧请求在期限内完成后关闭。\n- [M5-SEC-001] 隔离远端服务凭据: 远端授权 Header 或 Token 不可由 Agent 覆盖，也不出现在工具元数据和遥测中。\n- [M5-FE-001] 展示远端同步进度: 服务工作台轮询 202 operation，并准确展示阶段、失败摘要和重试入口。\n- [M5-E2E-001] 验证 Remote MCP 完整闭环: 创建、同步、原子发布、list、call、revision 切换和排空形成真实端到端路径。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-SEC-003",
+        "M2-SCOPE-001",
+        "M3-SCOPE-001",
+        "M4-SCOPE-001"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/03-service-crud.md",
+        "docs/architecture/05-agent-gateway.md",
+        "docs/architecture/08-implementation-plan.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 12 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M6-SCOPE-001",
+      "priority": 600,
+      "milestone": "M6",
+      "area": "planning",
+      "title": "M6 范围占位（待拆分）：STDIO 上传、构建与运行",
+      "behavior": "本条目是 M6（STDIO 上传、构建与运行）在 2026-08-09 从 16 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M6-UPLOAD-001] 上传 FastMCP 源代码包: 授权用户可上传受大小、文件数和格式限制的代码包并获得内容摘要。\n- [M6-UPLOAD-002] 拒绝危险压缩包: 上传解析拒绝绝对路径、符号链接逃逸、压缩炸弹和重复覆盖条目。\n- [M6-BUILD-001] 创建隔离构建任务: 上传成功后创建独立 Build operation，API 请求不直接执行容器构建。\n- [M6-BUILD-002] 在 rootless 沙箱构建: 构建容器以非 root、资源限制和受控网络运行，不挂载宿主特权 Docker socket。\n- [M6-BUILD-003] 固定并记录依赖解析结果: 构建产物记录锁文件、基础镜像和依赖摘要，禁止未声明的漂移。\n- [M6-BUILD-004] 扫描并登记构建制品: 成功镜像在扫描通过后按 digest 登记，失败制品不得进入探测。\n- [M6-PROBE-001] 临时启动 FastMCP 探测容器: 探测容器与构建容器分离，并通过 stdio 完成 initialize。\n- [M6-PROBE-002] 从探测结果生成候选 Toolset: 探测 tools/list 结果经过统一 Schema 校验后进入 publication service。\n- [M6-RUN-001] 以加固策略启动运行容器: 运行容器使用只读根文件系统、非 root、cap drop、seccomp 和资源上限。\n- [M6-RUN-002] 建立 MCP stdio 协议桥: 网关在不解析用户 stdout 日志为协议消息的情况下桥接 MCP 请求与响应。\n- [M6-RUN-003] 实施并发上限与背压: 每服务实例池、队列长度和请求并发超限时返回稳定繁忙错误。\n- [M6-RUN-004] 传播超时与取消: 客户端取消或超时会终止对应调用，并在必要时清理失控容器。\n- [M6-RUN-005] 清理完整进程树与 cgroup: 容器退出、取消或排空超时后不存在遗留子进程和资源占用。\n- [M6-GC-001] 安全回收未引用制品: GC 只删除超过保留期且无活动或可回退引用的制品，并支持 dry-run。\n- [M6-FE-001] 展示上传构建探测进度: 工作台准确展示上传、构建、扫描、探测、发布和失败阶段。\n- [M6-E2E-001] 验证 STDIO 完整闭环: 上传、构建、探测、发布、Agent 调用、取消、回退和清理形成真实端到端路径。",
+      "status": "not_started",
+      "dependencies": [
+        "M1-MODEL-005",
+        "M1-STORAGE-001",
+        "M2-SCOPE-001",
+        "M3-SCOPE-001"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/04-stdio-sandbox.md",
+        "docs/architecture/05-agent-gateway.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 16 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M7-SCOPE-001",
+      "priority": 700,
+      "milestone": "M7",
+      "area": "planning",
+      "title": "M7 范围占位（待拆分）：前端体验、可观测与运维闭环",
+      "behavior": "本条目是 M7（前端体验、可观测与运维闭环）在 2026-08-09 从 18 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M7-FE-001] 实现服务市场列表: 用户可按服务类型、归属、鉴权和真实运行状态筛选并分页浏览服务。\n- [M7-FE-002] 实现创建服务向导: 四步向导按 http_api、mcp_http、stdio 类型渐进展示所需配置并保留草稿。\n- [M7-FE-003] 实现服务详情工作台: 工作台提供概览、配置、工具、Activity、接入、权限和危险操作入口。\n- [M7-FE-004] 展示真实发布状态: 界面区分草稿、校验中、发布失败、活动版本和已被新配置取代五类状态。\n- [M7-FE-005] 实现 Tool Schema 双视图编辑器: 表单视图与 JSON 视图共享同一完整 MCP Tool Schema，切换不丢未知字段。\n- [M7-FE-006] 处理 409 并发冲突: 配置保存冲突时保留本地草稿，并提供刷新、比较和重新应用操作。\n- [M7-FE-007] 实现一次性 API Key 弹窗: 创建 Key 后只在一次性 Modal 中显示明文，并要求用户确认已保存。\n- [M7-FE-008] 实现 Agent 接入片段: 接入页生成不含下游秘密的端点与客户端配置片段，并支持复制。\n- [M7-FE-009] 实现服务权限管理: 授权用户可查看和调整 owner、editor、viewer，并正确触发 Step-up。\n- [M7-FE-010] 实现团队管理页面: 管理员可以查看团队、成员和服务归属，并进行受权变更。\n- [M7-FE-011] 实现用户管理页面: 全局管理员可查看用户状态并执行禁用、恢复和会话撤销。\n- [M7-FE-012] 实现审计中心页面: 全局管理员可按主体、服务、动作和时间检索脱敏审计事件。\n- [M7-FE-013] 实现中英文界面切换: 导航、表单、状态、错误和操作文案支持中英文并保持布局稳定。\n- [M7-FE-014] 满足可访问性与响应式基线: 关键流程支持键盘、焦点、语义标签、对比度和规定桌面/窄屏断点。\n- [M7-OBS-001] 输出低基数 Metrics: 控制面、网关、Worker 和 Connector 输出规定指标且标签符合 allowlist。\n- [M7-OBS-002] 输出结构化脱敏日志: 所有进程使用统一结构化日志并关联 request、service、operation 和 trace 标识。\n- [M7-OBS-003] 传播分布式 Trace: 管理 API、网关、Worker 和下游调用传播 W3C Trace Context 并形成规定 span。\n- [M7-OPS-001] 建立 SLO、告警、仪表盘与 Runbook: 关键可用性、延迟、发布失败、沙箱和依赖降级都有可执行运维入口。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-BE-003",
+        "M1-MODEL-001",
+        "M1-MODEL-008",
+        "M1-SEC-003",
+        "M2-SCOPE-001",
+        "M3-SCOPE-001",
+        "M4-SCOPE-001",
+        "M5-SCOPE-001",
+        "M6-SCOPE-001"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/06-frontend.md",
+        "docs/architecture/07-observability.md",
+        "docs/UI_UX_PLAN.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 18 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    },
+    {
+      "id": "M8-SCOPE-001",
+      "priority": 800,
+      "milestone": "M8",
+      "area": "planning",
+      "title": "M8 范围占位（待拆分）：发布候选、演练与渐进交付",
+      "behavior": "本条目是 M8（发布候选、演练与渐进交付）在 2026-08-09 从 11 条已展开的 feature 折叠而成的占位条目，目的是减少在尚未开始实现前维护大量可能随架构调整而过期的细粒度验证命令。真正开始该里程碑的实现前，必须先把下面每一条重新拆回独立的、可在一个 session 内完成并带具体验证命令的 feature（参照 M0/M1 现有条目的粒度），不得直接对本占位条目本身声明 passing。\n\n折叠前的原始范围：\n- [M8-DB-001] 通过 PostgreSQL 正式矩阵: 迁移、约束、事务、CAS、CRUD、auth 和 publication 在 PostgreSQL 14+ 全部通过。\n- [M8-DB-002] 通过 MySQL 正式矩阵: 与 PostgreSQL 相同的 contract suite 在 MySQL 8.0+ 无减项通过。\n- [M8-BROWSER-001] 通过浏览器关键路径矩阵: 登录、服务创建、发布、Key、权限和审计流程在支持浏览器中通过。\n- [M8-SEC-001] 通过应用安全验证: SSRF、IDOR、CSRF、Token 重放、秘密 canary 和资源耗尽场景无高风险失败。\n- [M8-SUPPLY-001] 生成供应链发布证据: 发布产物包含 SBOM、digest、漏洞扫描、许可证结果和 provenance。\n- [M8-UPGRADE-001] 验证数据库升级与应用回退: fresh DB、上一版本 DB 和代表性快照升级后可运行 smoke，并支持应用 N-1 回退。\n- [M8-RECOVERY-001] 演练备份恢复: 数据库、对象存储引用和关键配置可在目标 RTO/RPO 内恢复并校验一致性。\n- [M8-FAILURE-001] 执行依赖故障演练: 数据库、Redis、远端 MCP、存储、Registry 和遥测故障符合既定降级语义。\n- [M8-PERF-001] 通过性能容量与耐久验证: 网关、发布、Worker 和 STDIO 在目标负载下满足 SLO 且无资源泄漏。\n- [M8-ROLL-001] 验证 Feature Flag 渐进发布: 能力按环境和服务逐步开启，关闭后可安全回退且不绕过授权。\n- [M8-RELEASE-001] 形成可签署发布候选: 全部 required gate、风险例外、证据链接和回退方案汇总为发布记录。",
+      "status": "not_started",
+      "dependencies": [
+        "M0-CI-001",
+        "M3-SCOPE-001",
+        "M4-SCOPE-001",
+        "M5-SCOPE-001",
+        "M6-SCOPE-001",
+        "M7-SCOPE-001"
+      ],
+      "verification": [
+        {
+          "type": "manual",
+          "command": "在开始本里程碑任何实现前，依据 behavior 中列出的原始条目和 source_refs 里的架构文档，把本占位条目拆分为若干可在一个 session 内完成、各自带具体自动化验证命令的 feature，追加进 feature_list.json 并让本占位条目被拆分后的条目替代（本条目自身不得被标记 passing）。",
+          "expected": "占位条目被一组细粒度 feature 替换，且新条目通过 node scripts/validate-feature-list.js 结构校验"
+        }
+      ],
+      "evidence": [],
+      "source_refs": [
+        "docs/architecture/08-implementation-plan.md",
+        "docs/architecture/09-verification.md"
+      ],
+      "implementation": {
+        "files": [],
+        "commits": []
+      },
+      "blocker": null,
+      "notes": "折叠自 11 条原始 feature，完整 id/标题/行为清单见 behavior 字段。折叠时间 2026-08-09，折叠前的完整版本见对应 git commit。"
+    }
+  ]
+}
