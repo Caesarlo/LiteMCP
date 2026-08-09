@@ -282,8 +282,8 @@ URL policy 应复用管理侧保存/同步时的校验器，但请求时仍需�
 
 只通过 [04-stdio-sandbox.md](04-stdio-sandbox.md) 的 `runner.py` 队列和 `bridge.py` 调用：
 
-- 同一 service 首期单运行容器、请求级串行；先获得舱壁/队列席位，再写 stdin，避免 JSON-RPC 交错。
-- 队列深度满或等待超过 `queue_timeout_ms` 返回 503 + `Retry-After`，不进入容器；总 deadline 必须扣除排队时间。
+- 同一 service 是一个实例池（默认大小 1，可配置到 `stdio_instance_max`），单实例内允许最多 `stdio_concurrency_per_instance` 个并发在途请求，二者均由 [04-stdio-sandbox.md](04-stdio-sandbox.md) 8.1 的 runner 编排；连接器先获得舱壁/池内并发席位，再写 stdin，避免同一实例的 JSON-RPC 交错（跨实例天然不交错，因为各自独立的 stdin/stdout）。
+- 池整体饱和（所有实例的并发槽位都满且已达 `stdio_instance_max`）时才排队；队列深度满或等待超过 `queue_timeout_ms` 返回 503 + `Retry-After`，不进入容器；总 deadline 必须扣除排队时间。
 - stdout 仅承载 MCP；stderr 进入已脱敏运行日志。非法 stdout frame 计协议错误并隔离当前调用，达到阈值触发健康状态/重启，而不是把杂音返回给 Agent。
 - 客户端取消时：尚未入队则移除；已执行则尽力发送 MCP cancel。若下游不支持取消，继续排空并丢弃结果，不能让晚到响应匹配下一请求。
 - 容器重启后 SDK 重新 initialize；未知执行结果不自动重放。
