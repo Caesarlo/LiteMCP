@@ -204,7 +204,7 @@ flowchart LR
 - 构建锁 base image/依赖/builder/platform digest；重复构建通过相同 cache key/layer/digest 或显式 cache-hit 指标证明复用，**不得以“明显更快”作为唯一断言**。依赖无 hash、sdist、VCS/URL/自定义 index 被拒绝。
 - inspect build/probe/run 容器，断言 rootless、non-root、drop ALL、no-new-privileges、seccomp、read-only、tmpfs、cgroup/ulimit、无 host mount/device/socket 和默认无网络；缺 cgroup v2/seccomp 的生产 profile fail-closed。
 - stdout framing 随机分块、非法 UTF-8/JSON、污染、未知/重复/晚到 ID、超大消息；stderr flood 不阻塞 stdout且有丢弃指标。
-- 队列 FIFO/满/等待超时/取消、单 in-flight、并发 lazy start、call timeout 后 cancel→TERM→KILL、孙进程清理、revision drain、restart budget/quarantine。
+- 队列 FIFO/满/等待超时/取消、实例池扩缩容（懒扩容去重、缩容不打断在途请求）、单实例内并发 request ID 匹配正确性（乱序响应不串号）、单实例故障域隔离（一个实例崩溃不影响池内其他实例）、call timeout 后 cancel→TERM→KILL、孙进程清理、revision drain、restart budget/quarantine。
 - runner crash/restart 只按精确 label/lease reconcile；Docker/Registry/resolver/egress proxy/Storage 故障符合 04 的继续服务或 fail-closed 语义。
 
 ### 5.5 Agent 网关（05）

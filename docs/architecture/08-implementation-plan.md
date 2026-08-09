@@ -250,7 +250,7 @@ flowchart LR
 - resolver 锁定 wheel/hash、离线 builder、build/probe/run 三阶段隔离；SBOM、scan report、OCI digest artifact 和 provenance。
 - probe 仅 initialize + tools/list；完整 Tool Schema 进入 staging，经安全/Schema/generation CAS 后发布。
 - rootless runtime 强制 non-root/drop capabilities/no-new-privileges/seccomp/read-only root/network none/cgroup/ulimit/tmpfs；inspect 后二次验证。
-- SDK stdio bridge、严格 newline-delimited JSON-RPC、stdout/stderr 隔离、有界输入输出；单实例 FIFO、有界队列、deadline/cancel、杀整 cgroup、restart budget、quarantine/reconcile。
+- SDK stdio bridge、严格 newline-delimited JSON-RPC、stdout/stderr 隔离、有界输入输出；实例池（默认 1，可配置到 `stdio_instance_max`）+ 单实例并发（默认 1，可配置到 `stdio_concurrency_per_instance`）、有界队列、deadline/cancel、单实例故障域隔离、restart budget、quarantine/reconcile。
 - frontend stdio 上传、构建/探测阶段、脱敏日志、资源限制、出网白名单、队列状态和人工重试。
 
 **退出标准**
