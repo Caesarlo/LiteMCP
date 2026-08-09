@@ -237,7 +237,7 @@
       "area": "engineering",
       "title": "定义后端配置加载",
       "behavior": "后端从环境变量加载类型安全配置，并对缺失的必需配置快速失败。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -246,18 +246,29 @@
           "expected": "配置默认值与缺失配置测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "validation",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/core/test_config.py -v",
+          "result": "17 passed: safe defaults (app_name/environment=dev/debug=false/gateway_enabled=false/local storage), typed SecretStr secrets, env overrides (scalars, comma-separated lists, storage path), fail-fast for missing database_url/redis_url/encryption_keys, prod refusal of debug/wildcard Origin/blank Origin/sample key/short key, explicit prod origin allowed, cached singleton. ruff and mypy clean; /livez import regression OK. Windows-equivalent of declared uv run pytest (uv unavailable in WSL bash).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/00-overview.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/src/litemcp/core/config.py",
+          "backend/tests/core/test_config.py",
+          "backend/pyproject.toml"
+        ],
         "commits": []
       },
       "blocker": null,
-      "notes": ""
+      "notes": "测试基础设施缺口随本 feature 补齐：pyproject.toml 新增 [tool.pytest.ini_options]（pythonpath=[src]、testpaths=[tests]、asyncio_mode=strict），是 AGENTS.md 允许的窄范围支持改动。M0 退出标准中的生产不安全配置拒绝（debug/宽泛 Origin/示例密钥）已在本 feature 的 config 层实现。"
     },
     {
       "id": "M0-ENV-002",

@@ -15,11 +15,11 @@
 - Last updated: 2026-08-09
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
-- Highest-priority unfinished feature: `M0-ENV-001`
-- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; root `Makefile` and Compose startup remain planned. Before any implementation work, run `node scripts/validate-feature-list.js` and (once per clone) `git config core.hooksPath .githooks`.
-- Standard verification: No repository-wide verification command exists yet; use the focused verification declared by the active feature. `node scripts/validate-feature-list.js` is now the repeatable structural/pass-gate check for `feature_list.json` itself.
+- Highest-priority unfinished feature: `M0-ENV-002` (.env.example)
+- Standard startup: Backend and frontend currently use the separate commands documented in `README.zh-CN.md`; root `Makefile` and Compose startup remain planned. Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
+- Standard verification: No repository-wide verification command exists yet; use the focused verification declared by the active feature. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself.
 - Current blocker: None.
-- Last passing feature: `M0-HARNESS-004`
+- Last passing feature: `M0-ENV-001`
 
 ## Session Log
 
@@ -160,3 +160,38 @@
 - Files changed: `feature_list.json`.
 - Verification: `node scripts/validate-feature-list.js` — 38 features, 4 passing, 0 structural errors.
 - Known residual: `M0-HARNESS-001`/`002`/`003` evidence entries still say "141 features" / "1 session, 6 checkpoints" — left as-is intentionally, since evidence is a timestamped record of what was true when that feature passed, not a live count.
+
+### Session 003 · 2026-08-09
+
+#### Goal
+
+- Baseline audit for `M0-ENV-001` per the staged audit plan (Phase A): hooks, config contract, test infrastructure gap, and Windows-equivalent verification command.
+
+#### Checkpoint 13 · Phase A baseline audit completed
+
+- Feature: `M0-ENV-001` (baseline audit only, feature remains `not_started`)
+- Result: All four Phase A items closed:
+  1. `git config core.hooksPath .githooks` set once in this clone; pre-commit hook confirmed to run `node scripts/validate-feature-list.js` when `feature_list.json` is staged. Note: the hook requires `node` on PATH of the committing environment (Windows Git for Windows has it; WSL bash in this session does not).
+  2. Config contract reviewed in `08-implementation-plan.md`, `00-overview.md`, `09-verification.md`: config comes from protected environment (twelve-factor); M0 exit standard requires **startup refusal** for sample/short secrets, wide Origin, wrong trusted proxy, or debug in production, plus zero canary-secret log leakage. `00-overview.md` mandates the file at `backend/src/litemcp/core/config.py`; tests/ tree in `00-overview.md` shows `unit/integration/dialects` subdirectories while the feature's declared verification points at `tests/core/test_config.py` — recorded as a decision point, do not silently change the feature's verification.
+  3. Test infrastructure gap confirmed: no `tests/` dir, no `conftest.py`, no `[tool.pytest.ini_options]` (no `asyncio_mode` configured) in `pyproject.toml`; `pydantic-settings` already in dependencies; `backend/src/litemcp/__init__.py` still the scaffold `Hello from litemcp!` main.
+  4. Windows-equivalent verification confirmed: `backend/.venv/Scripts/python.exe` (Python 3.13.2) with `pydantic-settings` and `pytest 9.1.1` installed; `uv` is not available in WSL bash. Equivalent command: `cd backend && .venv/Scripts/python.exe -m pytest tests/core/test_config.py`.
+- Files changed: `.git/config` (hooksPath, local), `progress.md`.
+- Verification: `node scripts/validate-feature-list.js` (via Windows node) still exits 0 — 38 features, 4 passing, 0 in_progress, 0 blocked.
+- Evidence: see result above.
+- Decision: Phase B (implementation) may start on `M0-ENV-001`; pytest asyncio config and `tests/` scaffolding are narrow supporting changes to be recorded when introduced. The tests directory layout decision (feature-declared `tests/core/test_config.py` vs doc `tests/unit/...`) will be resolved in favor of the feature's declared verification path.
+- Next action: Implement `M0-ENV-001` per the audit plan Phase B: `core/config.py` typed settings + fail-fast, `tests/core/test_config.py` with defaults/override/missing-required negative cases, keep `/livez` green.
+
+#### Checkpoint 14 · M0-ENV-001 implemented and passed its gate
+
+- Feature: `M0-ENV-001`
+- Status change: `not_started` → `in_progress` → `passing` (same session).
+- Result:
+  1. `backend/src/litemcp/core/config.py` — typed `Settings(BaseSettings)` with `LITEMCP_` env prefix, `.env` support; required `database_url`/`redis_url`/`encryption_keys` fail fast with `ValidationError`; documented safe defaults (env=dev, debug=false, gateway_enabled=false, storage local); comma-separated list parsing via `NoDecode` + before-validators; prod refusal of debug, wildcard/blank Origin, sample or short Fernet keys (M0 exit standard from `08-implementation-plan.md`); cached `get_settings()` singleton.
+  2. `backend/tests/core/test_config.py` — 17 tests: safe defaults, SecretStr typing, env overrides (scalars/comma lists/storage), missing-required negative cases (each required var), blank-key rejection, prod negative cases (debug, `*`, blank origin, sample key, short key), explicit prod origin allowed, cached singleton.
+  3. `backend/pyproject.toml` — added `[tool.pytest.ini_options]` (pythonpath=[src], testpaths=[tests], asyncio_mode=strict) as the narrow test-infrastructure support change; no dependency changes (pydantic-settings already declared).
+  4. Two implementation iterations recorded: list env parsing needed `NoDecode` + before-validators (first run 16 failed); prod+debug scalar test was self-contradictory and the nested `storage` model used non-intuitive double-underscore env names — flattened `storage_backend`/`storage_path` (first run 4 failed).
+- Files changed: `backend/src/litemcp/core/config.py` (new), `backend/tests/core/test_config.py` (new), `backend/pyproject.toml`, `feature_list.json`, `progress.md`.
+- Verification: `cd backend && .venv/Scripts/python.exe -m pytest tests/core/test_config.py -v` → 17 passed; `ruff check` clean (3 auto-fixes); `mypy src/litemcp/core/config.py` clean (1 `# type: ignore[call-arg]` on `Settings()` documented); app import regression shows `/livez`/`/readyz` intact; `node scripts/validate-feature-list.js` exits 0 (5 passing, 0 in_progress).
+- Evidence: recorded on `M0-ENV-001` in `feature_list.json`.
+- Decision: Production-refusal checks live in the config layer per the M0 exit standard; `.env.example` coverage is deferred to `M0-ENV-002` (next).
+- Next action: Start `M0-ENV-002` (.env.example covering database/Redis/keys/storage/gateway with no real secrets, verified by `make validate-env-example`).
