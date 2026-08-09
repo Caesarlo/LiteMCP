@@ -824,7 +824,7 @@
       "area": "data",
       "title": "建立异步数据库会话工厂",
       "behavior": "每个请求或任务获得独立 SQLAlchemy AsyncSession，并能可靠释放。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-ENV-001"
       ],
@@ -835,18 +835,46 @@
           "expected": "会话隔离和释放测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/db/test_session.py -v",
+          "result": "RED confirmed in controlling session first (ModuleNotFoundError: No module named 'litemcp.db'). After implementer + controller contract correction: 6 passed. Tests pin: factory yields NEW independent AsyncSession per call (distinct objects, separate transactions — commit in one, rollback in the other, no cross-talk); reliable release on normal exit (engine.pool.checkedout() returns 0 after the context block); reliable release on exception (exception propagates AND connection still returned); get_session_factory() wired from get_settings().database_url; dispose() releases pooled resources (idempotent, no raise); two concurrent tasks each commit independent writes to a shared table. Uses SQLite async (aiosqlite) per 01-data-model L9/L52 — real PostgreSQL/MySQL dialect contracts are the separate M1-DB-002+/db-matrix features. Windows-equivalent of declared uv run pytest.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 49 passed (43 + 6), no regression. ruff clean (only SIM117 per-file-ignore on the contract test — nested async context managers are intentional). mypy clean (8 source files). compileall clean. Concurrency test stable across 3 isolated runs.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node scripts/validate-feature-list.js",
+          "result": "exits 0 (15 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/__init__.py",
+          "backend/src/litemcp/db/session.py",
+          "backend/tests/db/test_session.py",
+          "backend/pyproject.toml",
+          "backend/uv.lock"
+        ],
+        "commits": [
+          "37dc940",
+          "d811c14"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行，测试写手定义契约、实现者独立实现。控制会话裁定修正测试契约：测试写手最初的 is_active/ dispose 断言误述了 SQLAlchemy 语义——Session.is_active 在 close() 后仍为 True（autobegin），engine.dispose() 也不会使新会话不可用（会重连），均经实证验证；实现者曾用 _FactorySession 覆盖 is_active、_disposed 终态标志等 hack 迎合错误断言，并把 pytest asyncio_mode 从 strict 改为 auto。控制会话将契约修正为断言 SQLAlchemy 真实可观察量（释放＝连接归还连接池 engine.pool.checkedout() 归 0，正常/异常两路径；dispose＝不抛错且连接池释放），异步 fixture 改用 @pytest_asyncio.fixture 从而保留 asyncio_mode=strict（M0-ENV-001 设定的项目不变量），实现简化为标准 SQLAlchemy（无语义覆盖、无终态 hack）。修正后仍完整固定声明的行为：独立会话、正常/异常可靠释放、配置接线、dispose 释放资源、并发 task 独立性。aiosqlite 经 uv add --group dev（uv 0.11.18, PowerShell）加入 dev 依赖并更新 uv.lock。测试用 SQLite（aiosqlite），符合 01-data-model L9/L52；真实双方言契约由 M1-DB-002+ 及 db-matrix 特性用 Docker compose 数据库验证。"
     },
     {
       "id": "M1-DB-002",
