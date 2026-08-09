@@ -244,7 +244,7 @@ HeroUI v3 当前没有内置 Stepper，因此使用语义化有序列表自行�
 #### STDIO
 
 - 上传代码包并显示文件名、大小和摘要计算进度。
-- 配置入口、runtime、公开/私密环境变量、资源、队列和 egress。
+- 配置入口、runtime、公开/私密环境变量、资源、队列、egress，以及实例池大小/单实例并发（默认都是 1，UI 明确标注"调高并发要求你的工具代码支持并发调用"，不做成一个不起眼的数字输入框）。
 - 创建成功后进入 build/probe/publish operation。
 
 ### 6.5 动作文案
@@ -313,7 +313,7 @@ Weather MCP                                      Remote MCP
 |---|---|---|
 | 尚未发布 | 无 `active_toolset_id`，且当前没有进行中的 build/sync | 中性 Chip，附"去配置"入口 |
 | 发布中 | 存在 `queued/running` 的 build_run 或 tool_sync_run | 进行中 Chip + 链接到 Activity 对应 operation，禁止误标成功 |
-| 已发布 | 存在 `active_toolset_id` 且最近一次 operation 是 `succeeded`／或 `http_api` 同步创建成功 | success Chip，附 active toolset 版本号 |
+| 已发布 | 存在 `active_toolset_id` 且最近一次 operation 是 `succeeded`／或 `http_api` 同步创建成功 | success Chip，附 active toolset 版本号；stdio/mcp_http 类型附加一句"表示 Schema 校验通过，不代表首次真实调用一定成功"——probe 阶段只探测 `tools/list`，不会替用户跑一遍业务逻辑，避免用户把"已发布"误解成"已验证可用" |
 | 最近一次更新失败（旧版本仍可用） | 存在 `active_toolset_id`（说明历史上发布成功过），但最近一次 build/sync 是 `failed` | warning Chip，明确文案"上次更新失败，当前仍在提供旧版本"，不能显示笼统的"失败"掩盖"旧版本仍可用"这个关键信息 |
 | 从未成功发布 | 无 `active_toolset_id` 且最近一次 operation 是 `failed` | danger Chip，文案"尚未发布成功"，与上一行区分，避免用户误以为服务完全不可用（可能只是还没配置完） |
 
