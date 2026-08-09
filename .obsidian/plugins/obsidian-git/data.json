@@ -1,0 +1,7 @@
+{
+  "autoPullInterval": 0,
+  "autoPushInterval": 0,
+  "autoSaveInterval": 0,
+  "commitMessage": "docs: update Obsidian vault",
+  "pullBeforePush": true
+}

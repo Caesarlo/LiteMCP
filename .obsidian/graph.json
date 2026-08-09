@@ -1,0 +1,12 @@
+{
+  "collapse-color-groups": true,
+  "collapse-display": false,
+  "collapse-forces": true,
+  "collapse-filter": false,
+  "colorGroups": [],
+  "search": "-path:.git -path:.obsidian",
+  "showAttachments": false,
+  "showExistingOnly": false,
+  "showOrphans": true,
+  "showTags": true
+}

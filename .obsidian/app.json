@@ -1,0 +1,11 @@
+{
+  "alwaysUpdateLinks": true,
+  "attachmentFolderPath": "docs/assets",
+  "newFileLocation": "folder",
+  "newFileFolderPath": "docs/inbox",
+  "newLinkFormat": "relative",
+  "readableLineLength": false,
+  "showUnsupportedFiles": true,
+  "strictLineBreaks": false,
+  "useMarkdownLinks": true
+}
