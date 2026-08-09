@@ -1,0 +1,14 @@
+#!/usr/bin/env sh
+# Feature-list pass-gate check.
+# Enable once per clone with:
+#   git config core.hooksPath .githooks
+#
+# Blocks a commit if feature_list.json is staged and structurally invalid:
+# duplicate/unknown ids, dependency cycles, missing required fields,
+# more than one in_progress feature, or a "passing" feature with no evidence.
+
+set -e
+
+if git diff --cached --name-only | grep -q '^feature_list\.json$'; then
+  node scripts/validate-feature-list.js
+fi
