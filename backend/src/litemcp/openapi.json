@@ -1,0 +1,49 @@
+{
+  "info": {
+    "title": "LiteMCP",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/livez": {
+      "get": {
+        "description": "Report process liveness only; never reach out to dependencies.",
+        "operationId": "livez_livez_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "title": "Response Livez Livez Get",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Livez"
+      }
+    },
+    "/readyz": {
+      "get": {
+        "description": "Derive real readiness from the current database/Redis probe state.\n\nProbes are resolved on this module at request time so tests can\nmonkeypatch them. They run on the thread pool executor so the event loop\nstays responsive and the sync ``asyncio.run``-based probes execute on a\nthread without a running loop.",
+        "operationId": "readyz_readyz_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readyz"
+      }
+    }
+  }
+}

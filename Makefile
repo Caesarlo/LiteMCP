@@ -8,7 +8,7 @@
 # Environment: Windows (GNU Make 4.4.1 via chocolatey). Backend tools are invoked
 # through the local venv (uv is not available in WSL bash); node/npm/make are on PATH.
 
-.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr
+.PHONY: help test lint build test-postgres test-mysql test-db-matrix validate-env-example validate-adr test-openapi update-openapi-snapshot
 
 help:
 	@echo "LiteMCP unified management entry point."
@@ -22,6 +22,8 @@ help:
 	@echo "  make test-db-matrix   full two-dialect matrix (needs M0-BOOT-001 compose + M1 dialect)"
 	@echo ""
 	@echo "Other targets:"
+	@echo "  make test-openapi            gate the committed OpenAPI snapshot against the live spec (M0-CONTRACT-001)"
+	@echo "  make update-openapi-snapshot regenerate and commit the OpenAPI snapshot after an intended contract change (M0-CONTRACT-001)"
 	@echo "  make validate-env-example   gate .env.example coverage and no real secrets (M0-ENV-002)"
 	@echo "  make validate-adr           gate docs/adr/ structure and required M0 topic coverage (M0-ADR-001)"
 
@@ -54,3 +56,9 @@ validate-env-example:
 
 validate-adr:
 	node scripts/validate-adr.js
+
+test-openapi:
+	cd backend && .venv/Scripts/python.exe -m pytest tests/contract/test_openapi_snapshot.py -q
+
+update-openapi-snapshot:
+	cd backend && .venv/Scripts/python.exe scripts/regenerate_openapi.py
