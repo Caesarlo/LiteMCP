@@ -942,7 +942,7 @@
       "area": "data",
       "title": "初始化 Alembic 迁移体系",
       "behavior": "迁移仓库只有一个 head，支持全新数据库升级到最新版本。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-DB-001"
       ],
@@ -953,18 +953,53 @@
           "expected": "Alembic 单 head 和 fresh upgrade 通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/db/test_migrations.py -v",
+          "result": "RED confirmed in controlling session first (5 failed: AssertionError 'missing Alembic config: backend/alembic.ini' — the absent migration infrastructure, not a typo or DB problem). After implementer: 5 passed. Contract pins: backend/alembic.ini with script_location resolving to backend/migrations/; backend/migrations/ holds env.py + script.py.mako; the revision graph has EXACTLY ONE head (an empty repo has zero heads, so the assertion forces a hand-written base/root revision); fresh upgrade head on an empty DEDICATED database succeeds on BOTH live dialects leaving alembic_version at the single head. Each fresh-upgrade test creates a uniquely-named empty database and drops it in teardown (PostgreSQL via asyncpg as the compose litemcp superuser; MySQL via root + GRANT ALL on the dedicated DB to the app user) — never touches the shared litemcp DB's tables. env.py is the Alembic async cookbook pattern (asyncio.run in run_migrations_online, offline mode included), URL read from the sqlalchemy.url main option, driven via command.upgrade in a worker thread. Windows-equivalent of declared uv run pytest.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "test",
+          "command": "make test-migrations",
+          "result": "exit 0, 5 passed. Gate mirrors test-db-types: starts docker compose database (PostgreSQL 16.14) + mysql under the dialects profile (MySQL 8.4.11), then runs tests/db/test_migrations.py via the backend venv. No skips; a connection failure is a hard fail.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "validation",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m alembic heads; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 60 passed (55 + 5 migration), no regression. alembic heads from backend/ reports exactly one head: m1_db_003_bootstrap_root. ruff clean; mypy clean (9 source files). alembic upgrade head --sql (offline mode) emits valid static SQL creating alembic_version and inserting the head.",
+          "recorded_at": "2026-08-09"
+        },
+        {
+          "kind": "regression",
+          "command": "node --test scripts/validate-make-help.test.js; node scripts/validate-feature-list.js; make ci-fast",
+          "result": "make-help gate 7/7 pass (M0-CMD-001 intact). feature-list validator exits 0. make ci-fast exits 0 in BOTH the PowerShell/cmd environment and the Git Bash/sh environment (all seven legs: backend ruff/mypy/pytest incl. the 60-test full suite, frontend eslint/tsc/vitest/vite build) — see notes for the user-directed shell-strategy supporting change.",
+          "recorded_at": "2026-08-09"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/alembic.ini",
+          "backend/migrations/env.py",
+          "backend/migrations/script.py.mako",
+          "backend/migrations/versions/m1_db_003_bootstrap_root.py",
+          "backend/tests/db/test_migrations.py",
+          "Makefile"
+        ],
+        "commits": [
+          "ad7dcc1",
+          "1e4e48b"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手仅依据 behavior/verification/source_refs 编写 tests/db/test_migrations.py（5 用例：迁移仓库布局、alembic.ini→migrations 指向、单一 head、双方言空库 fresh upgrade），实现者独立搭建 Alembic 体系（backend/alembic.ini + migrations/env.py async cookbook + script.py.mako + 手写 base revision m1_db_003_bootstrap_root，down_revision=None、upgrade/downgrade no-op——刻意的手写图根而非空 autogenerate，docs 禁止的是空 --autogenerate 输出）+ make test-migrations 门禁。窄范围支持改动（用户定向）：Makefile shell 策略改为 sh 优先 + cmd 回退——实测本机 GNU Make 4.4.1（Windows）忽略 SHELL:=pwsh 与 SHELL:=sh（找不到目标 shell 时静默回退 cmd；连 make SHELL=pwsh 命令行覆盖与 unexport SHELL 都无效，仅支持 sh/cmd 两族 recipe shell），故用 $(shell echo $$0) 解析期探测 shell 类型（cmd 原样输出 $0、sh 输出自身名），venv 工具路径走 $(PY)/$(RUFF)（sh 用 /、cmd 用反斜杠）、echo 走 $(Q) 引号包裹（sh 需引号包裹 ()/;，cmd 会原样输出引号故 Q 为空）、空行走 $(BLANK)。两种环境均验证 make ci-fast exit 0。领域实体迁移不属本 feature，随 M1-MODEL-* 落地。"
     },
     {
       "id": "M1-MODEL-001",
