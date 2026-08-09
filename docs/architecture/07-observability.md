@@ -149,6 +149,8 @@ flowchart LR
 | `litemcp_toolset_publications_total` | Counter | `source_kind,outcome,reason_code` | validate/activate/reject/supersede/rollback 结果 |
 | `litemcp_toolset_publication_duration_seconds` | Histogram | `source_kind,outcome` | 候选产生至终态，网络/构建不在 DB 锁内 |
 | `litemcp_stdio_instances` | Gauge | `service_id*,state` | `starting|running|backoff|quarantined|stopping` |
+| `litemcp_stdio_pool_size` | Gauge | `service_id*` | 当前实例池大小（不超过 `stdio_instance_max`） |
+| `litemcp_stdio_instance_inflight` | Gauge | `service_id*` | 池内全部实例当前在途 `tools/call` 总数（不超过 池大小 × `stdio_concurrency_per_instance`） |
 | `litemcp_stdio_instance_start_duration_seconds` | Histogram | `outcome` | create 到 initialize 成功/失败 |
 | `litemcp_stdio_instance_restarts_total` | Counter | `reason_code` | crash/health/OOM/PID 等重启 |
 | `litemcp_stdio_resource_limit_events_total` | Counter | `resource,action` | cpu/memory/pids/disk/output；throttle/kill/reject |
