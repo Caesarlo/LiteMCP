@@ -2,9 +2,9 @@
 
 # LiteMCP
 
-### 通过一个安全网关，发布你的所有 MCP 服务。
+### 企业级 MCP 治理。不用为每个已有 HTTP API 手写 MCP Server。
 
-一个用于接入、发布和治理 MCP 服务的开源控制平面与网关。
+不用再为每一个 HTTP API 单独写一个 MCP Server。只描述一次，LiteMCP 就完成转换、治理和网关代理——连同你透传的 MCP 服务、上传的自定义代码包，全部收拢在一个开源控制平面里。
 
 [English](README.md) | [简体中文](README.zh-CN.md)
 
@@ -32,13 +32,20 @@ LiteMCP 提供一个统一的接入与治理入口。服务经过校验后，以
 
 Agent 只需要面对一个稳定接口；平台团队则可以管理发布、访问权限，并准确判断当前真正对外服务的版本。
 
+## 核心卖点
+
+- **企业级治理，一套 compose 就能落地**——RBAC、审计日志、密钥轮换、原子发布/回退，覆盖 PostgreSQL/MySQL 双方言，只需一套 `docker compose`（database、Redis、backend、worker、frontend）。安全评审会问的问题都有现成答案，不需要为此搭一整套平台工程。
+- **一个网关，替代 N 个手写 MCP Server**——不用再为每一个 HTTP API 单独写一个 MCP Server 并长期维护。只需要提供一次 Tool Schema 和 HTTP Binding，协议转换、校验、凭据注入、SSRF 防护和调用，之后每个接入的服务都由 LiteMCP 统一承担。
+- **已有 MCP 服务原样透传，安全能力由 LiteMCP 统一兜底**——直接接入远程 MCP Server，Agent 鉴权、限流和审计集中在 LiteMCP 侧完成，下游 MCP Server 不需要自己实现一套网关安全能力。
+- **支持自定义代码包上传运行**——上传 FastMCP 源码包，LiteMCP 负责构建、探测并在沙箱化、资源受限的容器中运行，你不需要自建镜像流水线和运行时。
+
 ## 接入三类服务
 
 | 服务类型 | 你需要提供 | LiteMCP 负责 |
 | --- | --- | --- |
 | **HTTP API** | MCP Tool Schema 和确定性的 HTTP Binding | 校验、凭据注入、SSRF 防护、调用和响应校验 |
-| **Remote MCP** | 远程 MCP Server 地址与凭据 | 工具发现、同步、代理、熔断和版本切换 |
-| **STDIO / FastMCP** | 源代码包 | 隔离构建、MCP 探测、沙箱执行和运行时生命周期 |
+| **Remote MCP（透传）** | 远程 MCP Server 地址与凭据 | 工具发现、同步、代理、**Agent 鉴权、限流与审计**、熔断和版本切换 |
+| **自定义代码包（STDIO / FastMCP）** | 源代码包 | 隔离构建、MCP 探测、沙箱执行和运行时生命周期 |
 
 > 三类连接器已经进入正式架构方案，但当前脚手架尚未实现。具体实现顺序请查看[路线图](#路线图)。
 

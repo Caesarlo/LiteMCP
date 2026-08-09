@@ -2,9 +2,9 @@
 
 # LiteMCP
 
-### Ship every MCP service through one secure gateway.
+### Enterprise-grade MCP governance. Zero hand-written MCP servers for the APIs you already have.
 
-An open-source control plane and gateway for connecting, publishing, and operating MCP services.
+Stop writing a new MCP server for every HTTP API. Describe it once, and LiteMCP converts, governs, and gateways it — alongside MCP servers you pass through and custom code packages you upload — from one open-source control plane.
 
 English | [简体中文](README.zh-CN.md)
 
@@ -32,13 +32,20 @@ LiteMCP provides one place to connect and govern them. Services are validated an
 
 Agents get one stable interface. Platform teams get controlled releases, access management, and a clear view of what is actually serving traffic.
 
+## Why LiteMCP
+
+- **Enterprise-grade governance, one compose stack away** — RBAC, audit trails, secret rotation, and atomic publish/rollback across dual-dialect PostgreSQL/MySQL, backed by a single `docker compose` (database, Redis, backend, worker, frontend). The questions a security review asks are already answered; you don't stand up a platform to get there.
+- **One gateway instead of N hand-written MCP servers** — stop writing and maintaining a bespoke MCP server for every HTTP API. Describe a Tool schema and an HTTP binding once; LiteMCP owns protocol conversion, validation, credential injection, SSRF protection, and invocation for every service behind it.
+- **Pass through existing MCP servers, LiteMCP owns the security layer** — connect a remote MCP server as-is; LiteMCP centralizes agent authentication, rate limiting, and audit logging in front of it, so the downstream server never has to implement its own gateway security.
+- **Run custom code packages** — upload a FastMCP source package and LiteMCP builds, probes, and runs it inside a sandboxed, resource-bounded container. No image pipeline or runtime to maintain yourself.
+
 ## Connect any service shape
 
 | Service type | You provide | LiteMCP manages |
 | --- | --- | --- |
 | **HTTP API** | MCP Tool schemas and deterministic HTTP bindings | Validation, credential injection, SSRF controls, invocation, and response validation |
-| **Remote MCP** | A remote MCP server endpoint and credentials | Tool discovery, synchronization, proxying, circuit breaking, and revision switching |
-| **STDIO / FastMCP** | A source package | Isolated build, MCP probing, sandboxed execution, and runtime lifecycle |
+| **Remote MCP (passthrough)** | A remote MCP server endpoint and credentials | Tool discovery, synchronization, proxying, **agent auth, rate limiting, and audit**, circuit breaking, and revision switching |
+| **Custom code package (STDIO / FastMCP)** | A source package | Isolated build, MCP probing, sandboxed execution, and runtime lifecycle |
 
 > These connectors are part of the approved architecture and are not yet available in the current scaffold. Their implementation order is tracked in the [roadmap](#roadmap).
 
