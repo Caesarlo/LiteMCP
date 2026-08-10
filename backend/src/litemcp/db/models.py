@@ -1,14 +1,18 @@
 """User, team, team-membership, service, service-config-revision, toolset,
-MCP-tool, service-artifact and build-run domain models (M1-MODEL-001..005).
+MCP-tool, service-artifact, build-run, service-condition and MCP-task domain
+models (M1-MODEL-001..006).
 
 Maps the ``user``, ``team``, ``team_membership``, ``mcp_service``,
-``service_config_revision``, ``toolset``, ``mcp_tool``, ``service_artifact``
-and ``build_run`` tables declared in docs/architecture/01-data-model.md §5.1,
-§5.16, §5.17, §5.2, §5.3, §5.7, §5.8, §5.5 and §5.6 onto SQLAlchemy ORM
-classes. Every mutable table carries the generic audit fields (§3.2) and its
-DB-level UNIQUE / CHECK / FK constraints (L63: enforcement lives in the
-database, never in a Python-side value check); immutable config revisions
-carry generic CREATE fields only — no ``updated_*`` / ``row_version`` (§5.3).
+``service_config_revision``, ``toolset``, ``mcp_tool``, ``service_artifact``,
+``build_run``, ``service_condition`` and ``mcp_task`` tables declared in
+docs/architecture/01-data-model.md §5.1, §5.16, §5.17, §5.2, §5.3, §5.7,
+§5.8, §5.5, §5.6, §5.11 and §5.15 onto SQLAlchemy ORM classes. Every mutable
+table carries the generic audit fields (§3.2) and its DB-level UNIQUE / CHECK
+/ FK constraints (L63: enforcement lives in the database, never in a
+Python-side value check); immutable config revisions carry generic CREATE
+fields only — no ``updated_*`` / ``row_version`` (§5.3), and ``mcp_task``
+carries the MCP time fields (``created_at`` / ``last_updated_at`` /
+``expires_at``) rather than the §3.2 audit set (§5.15).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
 ``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
@@ -724,3 +728,132 @@ class TeamMembership(Base):
     row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
+
+
+class ServiceCondition(Base):
+    """A runtime-observed condition of a service, independent of the user's
+    desired config (§5.11).
+
+    ``service_condition`` persists what the system actually observed about a
+    service (config applied, build produced, tools ready, runtime healthy,
+    upstream reachable) so a transient ``build_status``/``last_error`` can
+    never overwrite each other. ``mcp_service.runtime_status`` is the
+    queryable summary; the condition rows are the diagnostic source of truth.
+    Runtime writes never modify the desired-config ``generation``. One row per
+    (service, type), UNIQUE; lifecycle is the ``status`` code, so rows carry
+    the full §3.2 audit set and are never soft-deleted.
+    """
+
+    __tablename__ = "service_condition"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id", "type", name="uq_service_condition_service_type"
+        ),
+        CheckConstraint(
+            "type IN ('ConfigReady', 'BuildReady', 'ToolsReady', "
+            "'RuntimeHealthy', 'UpstreamReachable')",
+            name="ck_service_condition_type",
+        ),
+        CheckConstraint(
+            "status IN ('true', 'false', 'unknown')",
+            name="ck_service_condition_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "ConfigReady",
+            "BuildReady",
+            "ToolsReady",
+            "RuntimeHealthy",
+            "UpstreamReachable",
+        ),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(
+        ENUM_CODE("true", "false", "unknown"), nullable=False
+    )
+    reason: Mapped[str] = mapped_column(String(64), nullable=False)
+    message: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    observed_generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    last_transition_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False
+    )
+    last_probe_at: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class McpTask(Base):
+    """An async-operation (MCP Tasks) record for a service tool (§5.15).
+
+    ``mcp_task`` models the MCP Tasks lifecycle used when a tool declares
+    ``execution.taskSupport`` as ``optional``/``required`` and the gateway has
+    Tasks enabled. ``id`` doubles as the MCP ``taskId``; ``tool_id`` pins the
+    exact tool version the task was created against; ``session_id_hash`` never
+    stores the raw session token. Terminal states are final (no return to the
+    working state) and expired tasks are GC'd, so the table carries the MCP
+    time fields (``created_at`` / ``last_updated_at`` / ``expires_at``), NOT
+    the §3.2 audit set, and declares no UNIQUE constraints.
+    """
+
+    __tablename__ = "mcp_task"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('working', 'input_required', 'completed', 'failed', "
+            "'cancelled')",
+            name="ck_mcp_task_status",
+        ),
+        CheckConstraint(
+            "poll_interval_ms > 0",
+            name="ck_mcp_task_poll_interval_positive",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    tool_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_tool.id"), nullable=False
+    )
+    session_id_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    downstream_task_id: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "working", "input_required", "completed", "failed", "cancelled"
+        ),
+        nullable=False,
+    )
+    status_message: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    result_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("service_artifact.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    last_updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    poll_interval_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
