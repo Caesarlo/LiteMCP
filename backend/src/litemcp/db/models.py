@@ -1,12 +1,13 @@
-"""User, team, team-membership, service and service-config-revision domain
-models (M1-MODEL-001/002/003).
+"""User, team, team-membership, service, service-config-revision, toolset and
+MCP-tool domain models (M1-MODEL-001/002/003/004).
 
-Maps the ``user``, ``team``, ``team_membership``, ``mcp_service`` and
-``service_config_revision`` tables declared in docs/architecture/01-data-model.md
-§5.1, §5.16, §5.17, §5.2 and §5.3 onto SQLAlchemy ORM classes. Every mutable
-table carries the generic audit fields (§3.2) and its DB-level UNIQUE / CHECK /
-FK constraints (L63: enforcement lives in the database, never in a Python-side
-value check); immutable config revisions carry generic CREATE fields only — no
+Maps the ``user``, ``team``, ``team_membership``, ``mcp_service``,
+``service_config_revision``, ``toolset`` and ``mcp_tool`` tables declared in
+docs/architecture/01-data-model.md §5.1, §5.16, §5.17, §5.2, §5.3, §5.7 and
+§5.8 onto SQLAlchemy ORM classes. Every mutable table carries the generic
+audit fields (§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63:
+enforcement lives in the database, never in a Python-side value check);
+immutable config revisions carry generic CREATE fields only — no
 ``updated_*`` / ``row_version`` (§5.3).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
@@ -25,13 +26,16 @@ from decimal import Decimal
 
 from sqlalchemy import (
     BigInteger,
+    Boolean,
     CheckConstraint,
     ForeignKey,
+    ForeignKeyConstraint,
     Index,
     Integer,
     Numeric,
     String,
     UniqueConstraint,
+    true,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -341,6 +345,156 @@ class ServiceConfigRevision(Base):
         UTC_TS(), nullable=False, default=_now_utc
     )
     created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+
+
+class Toolset(Base):
+    """An atomic publish unit of MCP Tool definitions for a service (§5.7).
+
+    ``toolset`` records the source of a toolset (manual authoring, FastMCP
+    introspection, an uploaded descriptor or a remote MCP server), the server
+    ``capabilities`` / ``info`` snapshots and validation outcome, and the
+    toolset lifecycle state (staging -> validating -> validated -> active, or
+    rejected / retired). A toolset is the unit of atomic publish — only the
+    service's active pointer (``mcp_service.active_toolset_id``) designates the
+    live one (§5.2 L165).
+    """
+
+    __tablename__ = "toolset"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id", "version_no", name="uq_toolset_service_version"
+        ),
+        # UNIQUE (id, service_id) backs the mcp_service.active_toolset_id
+        # cross-table ownership constraint and the mcp_tool composite FK
+        # (toolset_id, service_id) -> toolset(id, service_id) (§5.7 / §5.8).
+        UniqueConstraint("id", "service_id", name="uq_toolset_id_service"),
+        CheckConstraint(
+            "source_kind IN ('manual', 'fastmcp', 'descriptor', 'remote_mcp')",
+            name="ck_toolset_source_kind",
+        ),
+        CheckConstraint(
+            "state IN ('staging', 'validating', 'validated', 'active', "
+            "'rejected', 'retired')",
+            name="ck_toolset_state",
+        ),
+        CheckConstraint("tool_count >= 0", name="ck_toolset_tool_count"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    config_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("service_config_revision.id"), nullable=True
+    )
+    version_no: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    source_kind: Mapped[str] = mapped_column(
+        ENUM_CODE("manual", "fastmcp", "descriptor", "remote_mcp"),
+        nullable=False,
+    )
+    source_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    mcp_protocol_version: Mapped[str] = mapped_column(String(16), nullable=False)
+    json_schema_dialect: Mapped[str] = mapped_column(
+        String(128),
+        nullable=False,
+        server_default="https://json-schema.org/draft/2020-12/schema",
+    )
+    server_capabilities: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    server_info: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    instructions: Mapped[str | None] = mapped_column(LONG_TEXT(), nullable=True)
+    state: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "staging", "validating", "validated", "active", "rejected", "retired"
+        ),
+        nullable=False,
+    )
+    validation_report: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    tool_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    activated_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    retired_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class McpTool(Base):
+    """A lossless MCP Tool definition owned by a toolset (§5.8).
+
+    ``mcp_tool`` stores the complete Tool object (``raw_definition``) plus the
+    parsed ``input_schema`` / ``output_schema``, ``annotations``, ``execution``,
+    ``icons``, ``_meta`` and ``http_binding`` so unknown MCP extensions survive
+    round-trips. ``enabled`` defaults to true; disabling is a per-toolset local
+    opt-out, never an edit of a published definition (§5.8). The composite FK
+    ``(toolset_id, service_id) -> toolset(id, service_id)`` guarantees a tool's
+    ``service_id`` always equals its toolset's ``service_id``.
+    """
+
+    __tablename__ = "mcp_tool"
+    __table_args__ = (
+        UniqueConstraint("toolset_id", "name", name="uq_mcp_tool_toolset_name"),
+        # Composite FK guaranteeing tool.service == toolset.service (§5.8).
+        # CASCADE so deleting a toolset also removes its tools (staging cleanup)
+        # on both dialects — a NO ACTION composite FK would block the cascade
+        # fired by the single-column toolset_id FK on PostgreSQL.
+        ForeignKeyConstraint(
+            ["toolset_id", "service_id"],
+            ["toolset.id", "toolset.service_id"],
+            name="fk_mcp_tool_toolset_service",
+            ondelete="CASCADE",
+        ),
+        CheckConstraint("source IN ('manual', 'synced')", name="ck_mcp_tool_source"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    toolset_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("toolset.id", ondelete="CASCADE"), nullable=False
+    )
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    title: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    description: Mapped[str | None] = mapped_column(LONG_TEXT(), nullable=True)
+    input_schema: Mapped[dict] = mapped_column(JSON_DOC(), nullable=False)
+    output_schema: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    annotations: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    execution: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    icons: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    meta: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    raw_definition: Mapped[dict] = mapped_column(JSON_DOC(), nullable=False)
+    definition_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    source: Mapped[str] = mapped_column(
+        ENUM_CODE("manual", "synced"), nullable=False
+    )
+    http_binding: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=true()
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
 
 
 class TeamMembership(Base):
