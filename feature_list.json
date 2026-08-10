@@ -1184,7 +1184,7 @@
       "area": "data",
       "title": "实现 Toolset 与 Tool 模型",
       "behavior": "候选、活动、退役和拒绝工具集可保存完整 MCP Tool Schema。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002"
       ],
@@ -1195,18 +1195,44 @@
           "expected": "状态、外键和 Schema 保存测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_toolset",
+          "result": "RED confirmed in controlling session first (12 failed, all on 'table \"toolset\"/\"mcp_tool\" is not registered on Base.metadata' / KeyError — the missing models, not a typo/setup). After implementer + controller adjudication of three test-writer defects: 12 passed (4 offline structural + 4 live on BOTH real PostgreSQL and MySQL via fresh-DB upgrade head, no skips). Offline: toolset (id, service_id FK->mcp_service RESTRICT, config_revision_id FK->service_config_revision nullable, version_no BigInteger, source_kind/state ENUM_CODE, source_digest String(64), mcp_protocol_version String(16), json_schema_dialect String(128) default 2020-12 URI, server_capabilities/server_info/validation_report JSON_DOC, instructions LONG_TEXT, tool_count Integer CHECK>=0, activated_at/retired_at UTC_TS, full §3.2 audit incl. row_version; UNIQUE (service_id,version_no) + (id,service_id); CHECK source_kind/state/tool_count>=0) and mcp_tool (id, toolset_id FK->toolset ON DELETE CASCADE, service_id FK->mcp_service, name String(128), title String(256) nullable, description LONG_TEXT nullable, input_schema/raw_definition JSON_DOC NOT NULL, output_schema/annotations/execution/icons/meta/http_binding JSON_DOC nullable, definition_digest String(64), source ENUM_CODE manual/synced, enabled Boolean default true, full §3.2 audit; UNIQUE (toolset_id,name); composite FK (toolset_id,service_id)->toolset(id,service_id); CHECK source). Live per dialect: 4 states (staging/active/rejected/retired) persist complete MCP Tool Schemas losslessly (input/output schema, annotations, execution, icons, _meta, http_binding, raw_definition round-trip; enabled DB default true); CHECK/range rejections (bogus state/source_kind/tool_count=-1/source); FK rejections (missing service, missing revision, missing toolset, composite FK cross-service); ON DELETE CASCADE drops tools; UNIQUE (service_id,version_no) + (toolset_id,name) collisions rejected.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 125 passed (113 existing + 12 model contract), no regression. ruff clean (9 cosmetic test-file fixes applied by controller: import sort, UP017 timezone.utc->UTC, SIM102 nested if, BLE001 noqa). mypy clean (10 source files). alembic heads → exactly one head: m1_model_004_toolset (down_revision = m1_model_003_config_revision).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 125 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (21 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_004_toolset.py",
+          "backend/tests/db/test_models_toolset.py"
+        ],
+        "commits": [
+          "40ded60",
+          "d50ac74"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写契约套件（§5.7 toolset + §5.8 mcp_tool），控制会话确认 RED（12 全败于缺失表）。实现者子代理独立落地 Toolset/McpTool 模型 + m1_model_004_toolset 迁移 + json_schema_dialect server_default(2020-12 URI) + enabled server_default(true)。控制会话裁定三处测试写手缺陷：(1) FK 目标表名 'service' → 'mcp_service'（真实表名，测试自身文档字符串/live 测试均以 mcp_service 为准）；(2) 四个 CHECK 违反断言异常类型放宽为 (IntegrityError, OperationalError)（MySQL errno 3819 CHECK 违反走 OperationalError，与 test_models_service.py 既有约定一致）；(3) 枚举列 source_kind/state/source 不固定精确 varchar 宽度（ENUM_CODE max+16 约定，实测 26/26/22 vs 文档名义 32/16/16，与 M1-MODEL-001/002/003 一致），只固定 CHECK 内容。另 9 处美容 ruff 修复（import sort、UP017、SIM102、BLE001 noqa）。范围边界记录：toolset.config_revision_id 是本 feature 首次落地的真实 FK（service_config_revision 由 M1-MODEL-003 创建）；复合 FK 与 toolset_id FK 均带 ON DELETE CASCADE（实现者实证：仅单列 toolset_id CASCADE 而复合 FK 用 NO ACTION 时 PostgreSQL 会阻止级联删除）；mcp_service.active_toolset_id 复合 FK 依赖 toolset UNIQUE(id,service_id) 已就绪，但其 enforcement 仍留给后续发布 feature（§5.2 L165）。"
     },
     {
       "id": "M1-MODEL-005",
