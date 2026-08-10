@@ -1413,7 +1413,7 @@
       "area": "data",
       "title": "实现审计事件与 Outbox 模型",
       "behavior": "业务变更和对应审计事件可以在同一事务中可靠记录。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-DB-002"
       ],
@@ -1424,15 +1424,41 @@
           "expected": "事务一致性测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_audit_outbox",
+          "result": "RED confirmed in controlling session first (ImportError: cannot import name 'AuditEvent' from 'litemcp.db.models' — the missing models, not a typo/setup). After implementer + controller verification: 60 passed on BOTH real PostgreSQL and MySQL (36 offline structural + 24 live, each live test on a unique fresh-DB upgraded to head, DB dropped in teardown; no skips). Offline: Base.metadata registers audit_event + outbox; column kinds (litemcp.db.types)/lengths/nullability; ENUM CHECK code sets (audit_event.actor_type user/api_key/system/anonymous, audit_event.result success/denied/failed, outbox.status pending/in_flight/done/failed); outbox UNIQUE(service_id, requested_generation, operation_kind); audit_event indexes occurred_at / (service_id, occurred_at) / (actor_type, actor_id, occurred_at); NO Section 3.2 audit columns on either table. Live per dialect: audit_event full-field round-trip, duplicate id rejected, NULL on NOT NULL rejected, disallowed actor_type/result codes rejected; outbox full-field round-trip, status default 'pending', attempt_count negative rejected, disallowed status code rejected, duplicate all-non-NULL dedup triple rejected (UNIQUE), two all-NULL-triple rows succeed (no dedup); core transactional consistency test_audit_and_outbox_commit_atomically — business row + audit_event + outbox written in one transaction, a forced constraint violation rolls back the WHOLE transaction (no audit_event/outbox row persisted).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 275 passed (215 existing + 60 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_008_audit_outbox (down_revision = m1_model_007_permission_key).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 275 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (25 passing, 0 in_progress after transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_008_audit_outbox.py",
+          "backend/tests/db/test_models_audit_outbox.py"
+        ],
+        "commits": [
+          "92a5a61",
+          "4e98a4a"
+        ]
       },
       "blocker": null,
       "notes": ""
