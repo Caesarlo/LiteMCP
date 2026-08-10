@@ -1,27 +1,38 @@
-"""User, team and team-membership domain models (M1-MODEL-001).
+"""User, team, team-membership and service domain models (M1-MODEL-001/002).
 
-Maps the ``user``, ``team`` and ``team_membership`` tables declared in
-docs/architecture/01-data-model.md §5.1, §5.16 and §5.17 onto SQLAlchemy ORM
-classes. Every table carries the generic audit fields (§3.2) and its DB-level
-UNIQUE / CHECK / FK constraints (L63: enforcement lives in the database, never
-in a Python-side value check).
+Maps the ``user``, ``team``, ``team_membership`` and ``mcp_service`` tables
+declared in docs/architecture/01-data-model.md §5.1, §5.16, §5.17 and §5.2
+onto SQLAlchemy ORM classes. Every table carries the generic audit fields
+(§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63: enforcement
+lives in the database, never in a Python-side value check).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
-``ID``, ``UTC_TS``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic scalar/String
-types — so the same models render valid DDL on PostgreSQL and MySQL. Enum-like
-columns are varchar-sized ``ENUM_CODE`` columns guarded by an explicit portable
-table-level ``CheckConstraint`` (no native database ENUM, §3.1 L46).
+``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
+scalar/String types — so the same models render valid DDL on PostgreSQL and
+MySQL. Enum-like columns are varchar-sized ``ENUM_CODE`` columns guarded by an
+explicit portable table-level ``CheckConstraint`` (no native database ENUM,
+§3.1 L46).
 """
 
 from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from decimal import Decimal
 
-from sqlalchemy import CheckConstraint, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import (
+    BigInteger,
+    CheckConstraint,
+    ForeignKey,
+    Index,
+    Integer,
+    Numeric,
+    String,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
-from litemcp.db.types import ENUM_CODE, ID, LONG_TEXT, UTC_TS
+from litemcp.db.types import ENUM_CODE, ID, JSON_DOC, LONG_TEXT, UTC_TS
 
 
 def _now_utc() -> datetime:
@@ -116,6 +127,136 @@ class Team(Base):
     row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
     )
+
+
+class Service(Base):
+    """A marketplace service's stable identity and expected state (§5.2).
+
+    ``mcp_service`` stores only the stable identity, the user's desired state
+    and the runtime summary; config/build history lives in the versioned
+    ``service_config_revision`` / ``toolset`` tables (M1-MODEL-002 does not
+    create those tables, so the active version pointers are present, ID-typed
+    and nullable but carry no FK here — their enforcement is a later feature,
+    §5.2 L165).
+    """
+
+    __tablename__ = "mcp_service"
+    __table_args__ = (
+        UniqueConstraint(
+            "namespace_key",
+            "name_normalized",
+            "uniqueness_scope",
+            name="uq_mcp_service_namespace_name_scope",
+        ),
+        Index(
+            "ix_mcp_service_namespace_desired_status_type",
+            "namespace_key",
+            "desired_status",
+            "type",
+        ),
+        Index(
+            "ix_mcp_service_team_desired_status",
+            "team_id",
+            "desired_status",
+        ),
+        Index(
+            "ix_mcp_service_created_by_deleted_at",
+            "created_by",
+            "deleted_at",
+        ),
+        CheckConstraint(
+            "type IN ('http_api', 'stdio', 'mcp_http')",
+            name="ck_mcp_service_type",
+        ),
+        CheckConstraint(
+            "desired_status IN ('enabled', 'disabled')",
+            name="ck_mcp_service_desired_status",
+        ),
+        CheckConstraint(
+            "runtime_status IN "
+            "('pending', 'ready', 'degraded', 'unhealthy', 'failed')",
+            name="ck_mcp_service_runtime_status",
+        ),
+        CheckConstraint(
+            "agent_auth_mode IN ('api_key', 'none', 'oauth2')",
+            name="ck_mcp_service_agent_auth_mode",
+        ),
+        CheckConstraint(
+            "observed_generation <= generation",
+            name="ck_mcp_service_generation_order",
+        ),
+        CheckConstraint(
+            "(type = 'stdio' OR (queue_max_depth IS NULL "
+            "AND queue_timeout_ms IS NULL AND stdio_instance_max IS NULL "
+            "AND stdio_concurrency_per_instance IS NULL))",
+            name="ck_mcp_service_stdio_only_null_for_non_stdio",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    namespace_key: Mapped[str] = mapped_column(String(64), nullable=False)
+    team_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("team.id", ondelete="RESTRICT"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(
+        ENUM_CODE("http_api", "stdio", "mcp_http"), nullable=False
+    )
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    name_normalized: Mapped[str] = mapped_column(String(128), nullable=False)
+    uniqueness_scope: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="LIVE", server_default="'LIVE'"
+    )
+    tags: Mapped[list] = mapped_column(
+        JSON_DOC(), nullable=False, default=list
+    )
+    description: Mapped[str | None] = mapped_column(LONG_TEXT(), nullable=True)
+    icon_object_key: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    desired_status: Mapped[str] = mapped_column(
+        ENUM_CODE("enabled", "disabled"), nullable=False
+    )
+    generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=1, server_default="1"
+    )
+    observed_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default="0"
+    )
+    runtime_status: Mapped[str] = mapped_column(
+        ENUM_CODE("pending", "ready", "degraded", "unhealthy", "failed"),
+        nullable=False,
+    )
+    # DEFERRED: FK enforcement of these version pointers is a later feature;
+    # only presence, ID typing and nullability are pinned here (§5.2 L165).
+    active_config_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), nullable=True
+    )
+    active_toolset_id: Mapped[uuid.UUID | None] = mapped_column(ID(), nullable=True)
+    agent_auth_mode: Mapped[str] = mapped_column(
+        ENUM_CODE("api_key", "none", "oauth2"), nullable=False
+    )
+    rate_limit_qps: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), nullable=True)
+    rate_limit_burst: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queue_max_depth: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    queue_timeout_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdio_instance_max: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    stdio_concurrency_per_instance: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+    # §3.3 soft-delete fields.
+    deleted_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    deleted_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
 
 
 class TeamMembership(Base):
