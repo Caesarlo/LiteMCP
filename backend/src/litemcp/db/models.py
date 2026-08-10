@@ -1,14 +1,14 @@
-"""User, team, team-membership, service, service-config-revision, toolset and
-MCP-tool domain models (M1-MODEL-001/002/003/004).
+"""User, team, team-membership, service, service-config-revision, toolset,
+MCP-tool, service-artifact and build-run domain models (M1-MODEL-001..005).
 
 Maps the ``user``, ``team``, ``team_membership``, ``mcp_service``,
-``service_config_revision``, ``toolset`` and ``mcp_tool`` tables declared in
-docs/architecture/01-data-model.md §5.1, §5.16, §5.17, §5.2, §5.3, §5.7 and
-§5.8 onto SQLAlchemy ORM classes. Every mutable table carries the generic
-audit fields (§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63:
-enforcement lives in the database, never in a Python-side value check);
-immutable config revisions carry generic CREATE fields only — no
-``updated_*`` / ``row_version`` (§5.3).
+``service_config_revision``, ``toolset``, ``mcp_tool``, ``service_artifact``
+and ``build_run`` tables declared in docs/architecture/01-data-model.md §5.1,
+§5.16, §5.17, §5.2, §5.3, §5.7, §5.8, §5.5 and §5.6 onto SQLAlchemy ORM
+classes. Every mutable table carries the generic audit fields (§3.2) and its
+DB-level UNIQUE / CHECK / FK constraints (L63: enforcement lives in the
+database, never in a Python-side value check); immutable config revisions
+carry generic CREATE fields only — no ``updated_*`` / ``row_version`` (§5.3).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
 ``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
@@ -482,6 +482,194 @@ class McpTool(Base):
     http_binding: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
     enabled: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=True, server_default=true()
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class ServiceArtifact(Base):
+    """An immutable build/code artifact for a service (§5.5).
+
+    ``service_artifact`` uniformly records source packages, service
+    descriptors, dependency bundles, built images and build logs as immutable
+    objects referenced by their storage key and content digest. The object
+    bytes live in the ``storage_backend`` (filesystem / s3 / minio / registry);
+    the database row only holds the immutable object key, digest and metadata.
+    Rows are never soft-deleted — lifecycle is ``state``
+    (staging -> available -> quarantined/gc_pending -> deleted), and GC only
+    touches ``gc_pending`` artifacts past ``retain_until`` (§5.5 L246). Rows
+    carry the full §3.2 audit set (``created_at``/``created_by``/``updated_at``/
+    ``updated_by``/``row_version``).
+    """
+
+    __tablename__ = "service_artifact"
+    __table_args__ = (
+        UniqueConstraint(
+            "storage_backend",
+            "object_key",
+            name="uq_service_artifact_storage_object_key",
+        ),
+        CheckConstraint(
+            "kind IN ('source_package', 'descriptor', 'build_bundle', "
+            "'container_image', 'build_log')",
+            name="ck_service_artifact_kind",
+        ),
+        CheckConstraint(
+            "storage_backend IN ('filesystem', 's3', 'minio', 'registry')",
+            name="ck_service_artifact_storage_backend",
+        ),
+        CheckConstraint(
+            "state IN ('staging', 'available', 'quarantined', "
+            "'gc_pending', 'deleted')",
+            name="ck_service_artifact_state",
+        ),
+        CheckConstraint(
+            "size_bytes >= 0",
+            name="ck_service_artifact_size_bytes_non_negative",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    config_revision_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("service_config_revision.id"), nullable=True
+    )
+    kind: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "source_package",
+            "descriptor",
+            "build_bundle",
+            "container_image",
+            "build_log",
+        ),
+        nullable=False,
+    )
+    storage_backend: Mapped[str] = mapped_column(
+        ENUM_CODE("filesystem", "s3", "minio", "registry"), nullable=False
+    )
+    object_key: Mapped[str] = mapped_column(String(1024), nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    media_type: Mapped[str] = mapped_column(String(128), nullable=False)
+    format: Mapped[str] = mapped_column(String(32), nullable=False)
+    state: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "staging", "available", "quarantined", "gc_pending", "deleted"
+        ),
+        nullable=False,
+    )
+    scan_report: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    retain_until: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class BuildRun(Base):
+    """A single build attempt for a service (§5.6).
+
+    ``build_run`` records one attempt to turn a ``source_artifact_id`` into a
+    validated, published toolset. The first-version strategy is ``fastmcp``;
+    ``descriptor`` / ``custom_adapter`` are reserved for later parsers/builders
+    but already allowed by the CHECK (§5.6 L258). A run links its input, its
+    output and its full build log as ``service_artifact`` rows, and captures
+    failures as ``error_code`` / ``error_summary`` (already redacted). Rows
+    carry the full §3.2 audit set (``created_at``/``created_by``/``updated_at``/
+    ``updated_by``/``row_version``).
+    """
+
+    __tablename__ = "build_run"
+    __table_args__ = (
+        Index(
+            "ix_build_run_service_status_created_at",
+            "service_id",
+            "status",
+            "created_at",
+        ),
+        CheckConstraint(
+            "strategy IN ('fastmcp', 'descriptor', 'custom_adapter')",
+            name="ck_build_run_strategy",
+        ),
+        CheckConstraint(
+            "status IN ('queued', 'building', 'validating', 'succeeded', "
+            "'failed', 'cancelled', 'superseded')",
+            name="ck_build_run_status",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    config_revision_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("service_config_revision.id"), nullable=False
+    )
+    source_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("service_artifact.id"), nullable=False
+    )
+    strategy: Mapped[str] = mapped_column(
+        ENUM_CODE("fastmcp", "descriptor", "custom_adapter"), nullable=False
+    )
+    parser_version: Mapped[str] = mapped_column(String(64), nullable=False)
+    base_image_digest: Mapped[str] = mapped_column(String(255), nullable=False)
+    dependency_digest: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    status: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "queued",
+            "building",
+            "validating",
+            "succeeded",
+            "failed",
+            "cancelled",
+            "superseded",
+        ),
+        nullable=False,
+    )
+    output_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("service_artifact.id"), nullable=True
+    )
+    discovered_descriptor: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    error_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    error_summary: Mapped[str | None] = mapped_column(
+        String(2048), nullable=True
+    )
+    log_artifact_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("service_artifact.id"), nullable=True
+    )
+    started_at: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
     )
 
     created_at: Mapped[datetime] = mapped_column(
