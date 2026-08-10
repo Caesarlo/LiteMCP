@@ -1,7 +1,7 @@
 {
   "project": "LiteMCP",
   "schema_version": "1.0",
-  "last_updated": "2026-08-09",
+  "last_updated": "2026-08-10",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -1068,7 +1068,7 @@
       "area": "data",
       "title": "实现服务模型",
       "behavior": "服务保存类型、归属、期望状态、generation 和活动版本指针。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-DB-002",
         "M1-DB-003"
@@ -1080,15 +1080,41 @@
           "expected": "服务约束和索引测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_service",
+          "result": "RED confirmed in controlling session first (20 failed, all on AssertionError: mcp_service table is not registered on litemcp.db.models.Base.metadata — the missing Service model, not a typo/setup). After implementer + controller adjudication: 20 passed (8 offline structural + 12 live checks on BOTH real PostgreSQL and MySQL via fresh-DB upgrade head). Offline: Base.metadata contains mcp_service; 30 columns with portable litemcp.db.types kinds (id/str/enum/json/longtext/ts/int/bigint/numeric); UNIQUE (namespace_key, name_normalized, uniqueness_scope); INDEX (namespace_key,desired_status,type), (team_id,desired_status), (created_by,deleted_at); portable CHECK enumerations on type/desired_status/runtime_status/agent_auth_mode, observed_generation <= generation, and all four stdio-only columns (queue_max_depth/queue_timeout_ms/stdio_instance_max/stdio_concurrency_per_instance) NULL for non-stdio; FK team.id RESTRICT; Section 3.2 audit fields (created_by/updated_by typed String(128) to match the uniform Section 3.2 convention shared with user/team/team_membership — controller-adjudicated from the test-writer initial ID kind) plus Section 3.3 soft-delete fields. Live per dialect (dedicated DB, upgrade head, ORM): insert service with team and defaults (generation=1, observed_generation=0, uniqueness_scope=LIVE), duplicate (namespace_key,name_normalized,uniqueness_scope) rejected, invalid type/desired_status/runtime_status/agent_auth_mode codes rejected, observed_generation > generation rejected, non-stdio with a stdio-only column set rejected, team FK RESTRICT rejects missing team. Active version pointers (active_config_revision_id/active_toolset_id) pinned as present nullable ID-typed columns WITHOUT FK — FK enforcement to service_config_revision/toolset is deferred to the feature that creates those tables (Section 5.2 L165). Windows-equivalent of declared uv run pytest (uv unavailable in WSL bash).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 93 passed (73 existing + 20 model contract), no regression. ruff clean (incl. two controller-applied cosmetic fixes in the test-writer file: RUF059 unused base_url unpack renamed to _base_url, FURB157 Decimal(\"1\") to Decimal(1)). mypy clean (10 source files). alembic heads → exactly one head: m1_model_002_service (down_revision = m1_model_001_user_team).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 93 tests + frontend eslint/tsc/vitest/vite build). feature-list validator exits 0 (19 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_002_service.py",
+          "backend/tests/db/test_models_service.py"
+        ],
+        "commits": [
+          "3a8e24e",
+          "6005345"
+        ]
       },
       "blocker": null,
       "notes": ""
