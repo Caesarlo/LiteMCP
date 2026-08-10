@@ -51,7 +51,7 @@ else
   SHELLKIND := sh
 endif
 
-.PHONY: help test lint build test-postgres test-mysql test-db-matrix test-db-types test-migrations validate-env-example validate-adr test-openapi update-openapi-snapshot ci-fast
+.PHONY: help test lint build test-postgres test-mysql test-db-matrix test-db-types test-migrations test-db-contract validate-env-example validate-adr test-openapi update-openapi-snapshot ci-fast
 
 help:
 	@echo $(Q)LiteMCP unified management entry point.$(Q)
@@ -67,6 +67,7 @@ help:
 	@echo $(Q)Dialect contract:$(Q)
 	@echo $(Q)  make test-db-types     M1-DB-002 cross-dialect type contract on live PostgreSQL + MySQL$(Q)
 	@echo $(Q)  make test-migrations   M1-DB-003 Alembic single-head + fresh upgrade on live PostgreSQL + MySQL$(Q)
+	@echo $(Q)  make test-db-contract  M1-MODEL-001 user/team/membership model contract on live PostgreSQL + MySQL (TEST=suite_name)$(Q)
 	$(BLANK)
 	@echo $(Q)Other targets:$(Q)
 	@echo $(Q)  make ci-fast                 run all seven fast CI legs: backend lint/type/unit + frontend lint/type/unit/build (M0-CI-001)$(Q)
@@ -124,6 +125,11 @@ test-migrations:
 	docker compose up -d --wait database
 	docker compose --profile dialects up -d --wait mysql
 	cd backend && $(PY) -m pytest tests/db/test_migrations.py -q
+
+test-db-contract:
+	docker compose up -d --wait database
+	docker compose --profile dialects up -d --wait mysql
+	cd backend && $(PY) -m pytest tests/db/test_$(TEST).py -q
 
 validate-env-example:
 	node scripts/validate-env-example.js

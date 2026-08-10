@@ -52,7 +52,11 @@ class AsyncSessionFactory:
         The session is closed in a ``finally`` block so the pooled connection
         is released on normal exit and on exception alike.
         """
-        session = AsyncSession(bind=self.engine)
+        # ``expire_on_commit=False`` keeps committed attribute values on the
+        # instance so callers can read them back without a session round-trip
+        # (M1-MODEL-001 model contract reads committed objects after the
+        # session is released).
+        session = AsyncSession(bind=self.engine, expire_on_commit=False)
         try:
             yield session
         finally:
