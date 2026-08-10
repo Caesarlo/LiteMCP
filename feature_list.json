@@ -1355,7 +1355,7 @@
       "area": "data",
       "title": "实现权限与 API Key 元数据模型",
       "behavior": "对象级权限和 API Key 摘要、前缀、到期及撤销状态可持久化。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-001",
         "M1-MODEL-002"
@@ -1367,18 +1367,44 @@
           "expected": "唯一性和撤销约束通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_permission_key",
+          "result": "RED confirmed in controlling session first (34 failed, all on 'mcp_service_permission'/'api_key' table not registered / KeyError — the missing models; two test-file setup bugs were fixed by the controller before the real RED was observable: (1) _maintenance_url used str(URL) which masks the password in SQLAlchemy 2.0 → engine connected with literal '***' → PG InvalidPasswordError; fixed with render_as_string(hide_password=False); (2) MySQL provisioning granted to 'litemcp'@'%%' via execute(text()) which double-escaped to '%%%%' and MySQL 8 refuses to auto-create users via GRANT (errno 1410) → rewrote to exec_driver_sql + query existing hosts + correct %-escaping). After implementer: 34 passed (6 offline structural + 14 live x 2 dialects, no skips). Offline: mcp_service_permission (id, service_id FK->mcp_service, principal_type enum user/team/everyone + CHECK, user_id FK->user nullable, team_id FK->team nullable, role enum editor/viewer + CHECK, principal_key String(80), full §3.2 audit, UNIQUE(service_id,principal_key), no soft-delete) and api_key (id, service_id FK->mcp_service, public_id String(32) UNIQUE, display_prefix String(32), secret_hash String(64) UNIQUE, hash_algorithm String(32) [plain, upgradable], pepper_version String(64) nullable, name String(128), status enum active/revoked + CHECK, expires_at UTC_TS nullable CHECK > created_at, last_used_at UTC_TS nullable, last_used_ip_hash String(64) nullable, revoked_at UTC_TS nullable CHECK (status<>'revoked' OR revoked_at NOT NULL), revoked_by FK->user nullable, rate_limit_qps Numeric nullable CHECK >0, rate_limit_burst Integer nullable CHECK >=1, full §3.2 audit, no soft-delete). Cross-field permission CHECKs pinned: user_id consistency (principal_type='user' ⇔ user_id NOT NULL), team_id consistency, role scope (principal_type='user' OR role='viewer'). Live per dialect: user/team/everyone valid rows persist; UNIQUE (service_id,principal_key) collision rejected; principal_type/user_id/team_id/role cross-field violations rejected; service FK rejected; api_key insert + revoke (UPDATE status/revoked_at/revoked_by) round-trips; UNIQUE public_id/secret_hash collisions rejected; revoked without revoked_at rejected; expires_at == created_at rejected; rate_limit_qps=0 / burst=0 rejected; dangling service / revoked_by FKs rejected.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 215 passed (181 existing + 34 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_007_permission_key (down_revision = m1_model_006_condition_task).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 215 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (24 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_007_permission_key.py",
+          "backend/tests/db/test_models_permission_key.py"
+        ],
+        "commits": [
+          "e23c690",
+          "b7cb665"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写契约套件（§5.12 mcp_service_permission + §5.13 api_key），控制会话确认 RED（34 全败于缺失表；先修复两处 setup bug：URL 密码掩码 + MySQL GRANT 双重转义/自动建用户）。实现者子代理独立落地 McpServicePermission/ApiKey 模型 + m1_model_007_permission_key 迁移。控制会话裁定：额外添加四个非唯一索引（ix_mcp_service_permission_service_principal_type / _user_role_service / _team_service + ix_api_key_service_status_expires_at）作为窄范围支持改动（支撑 §5.12 visible/writable 查询与 key 到期扫描，未在文档声明但非破坏性，已记录）；hash_algorithm 故意为普通 String(32)（第一版 sha256-v1，可升级，不加 CHECK 锁死）。范围边界：权限模型『无隐式默认』（everyone 行即显式公开读授权）是领域服务不变量，DB 层仅以 UNIQUE(service_id,principal_key) + 跨字段 CHECK 表达；API Key 明文永不落库（仅 selector/prefix/digest），是应用层保证。"
     },
     {
       "id": "M1-MODEL-008",
