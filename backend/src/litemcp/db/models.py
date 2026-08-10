@@ -1,10 +1,13 @@
-"""User, team, team-membership and service domain models (M1-MODEL-001/002).
+"""User, team, team-membership, service and service-config-revision domain
+models (M1-MODEL-001/002/003).
 
-Maps the ``user``, ``team``, ``team_membership`` and ``mcp_service`` tables
-declared in docs/architecture/01-data-model.md §5.1, §5.16, §5.17 and §5.2
-onto SQLAlchemy ORM classes. Every table carries the generic audit fields
-(§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63: enforcement
-lives in the database, never in a Python-side value check).
+Maps the ``user``, ``team``, ``team_membership``, ``mcp_service`` and
+``service_config_revision`` tables declared in docs/architecture/01-data-model.md
+§5.1, §5.16, §5.17, §5.2 and §5.3 onto SQLAlchemy ORM classes. Every mutable
+table carries the generic audit fields (§3.2) and its DB-level UNIQUE / CHECK /
+FK constraints (L63: enforcement lives in the database, never in a Python-side
+value check); immutable config revisions carry generic CREATE fields only — no
+``updated_*`` / ``row_version`` (§5.3).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
 ``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
@@ -257,6 +260,87 @@ class Service(Base):
     # §3.3 soft-delete fields.
     deleted_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
     deleted_by: Mapped[str | None] = mapped_column(String(128), nullable=True)
+
+
+class ServiceConfigRevision(Base):
+    """An immutable desired-config revision for a service (§5.3).
+
+    Content fields (``public_config``, ``secret_blob_id``, ``config_digest``)
+    are immutable once created — a config change appends a new revision with
+    the next ``generation``. Only the revision's own lifecycle state
+    (``state`` / ``validation_report`` / ``activated_at`` / ``superseded_at``)
+    may transition in place. Immutable revisions carry generic CREATE fields
+    only (``created_at`` / ``created_by``) — no ``updated_*`` / ``row_version``
+    (§5.3 L188).
+    """
+
+    __tablename__ = "service_config_revision"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id",
+            "generation",
+            name="uq_service_config_revision_service_generation",
+        ),
+        # UNIQUE (id, service_id) backs the mcp_service.active_config_revision_id
+        # cross-table ownership constraint (§5.3 / §5.2 L165).
+        UniqueConstraint(
+            "id", "service_id", name="uq_service_config_revision_id_service"
+        ),
+        CheckConstraint(
+            "config_kind IN ('http_api', 'stdio', 'mcp_http')",
+            name="ck_service_config_revision_config_kind",
+        ),
+        CheckConstraint(
+            "source_mode IN "
+            "('fastmcp_introspection', 'descriptor', 'manual', 'remote_sync')",
+            name="ck_service_config_revision_source_mode",
+        ),
+        CheckConstraint(
+            "state IN ('draft', 'validating', 'validated', 'active', 'rejected', "
+            "'superseded')",
+            name="ck_service_config_revision_state",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    generation: Mapped[int] = mapped_column(BigInteger, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    config_kind: Mapped[str] = mapped_column(
+        ENUM_CODE("http_api", "stdio", "mcp_http"), nullable=False
+    )
+    public_config: Mapped[dict] = mapped_column(JSON_DOC(), nullable=False)
+    # DEFERRED: FK enforcement of secret_blob_id -> service_secret.id is a later
+    # feature; only presence, ID typing and nullability are pinned here (§5.3).
+    secret_blob_id: Mapped[uuid.UUID | None] = mapped_column(ID(), nullable=True)
+    source_descriptor: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    source_mode: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "fastmcp_introspection", "descriptor", "manual", "remote_sync"
+        ),
+        nullable=False,
+    )
+    config_digest: Mapped[str] = mapped_column(String(64), nullable=False)
+    state: Mapped[str] = mapped_column(
+        ENUM_CODE(
+            "draft", "validating", "validated", "active", "rejected", "superseded"
+        ),
+        nullable=False,
+    )
+    validation_report: Mapped[dict | None] = mapped_column(
+        JSON_DOC(), nullable=True
+    )
+    activated_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    superseded_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
 
 
 class TeamMembership(Base):

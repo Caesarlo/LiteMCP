@@ -105,15 +105,27 @@ class UTC_TS(TypeDecorator[Any]):
 
 
 class JSON_DOC(TypeDecorator[Any]):
-    """A nested JSON document, ``JSONB`` on PostgreSQL and ``JSON`` on MySQL."""
+    """A nested JSON document, ``JSONB`` on PostgreSQL and ``JSON`` on MySQL.
+
+    A top-level Python ``None`` binds as SQL ``NULL`` (``none_as_null=True``),
+    never as the JSON literal ``null``: a JSON document column either holds a
+    document or is absent, so a ``NOT NULL`` JSON column rejects Python
+    ``None`` at the database layer (§3.2 L63: enforcement lives in the
+    database). Nested ``None`` inside a document is unaffected and round-trips
+    as JSON ``null``.
+    """
 
     impl = JSON
     cache_ok = True
 
+    def __init__(self, none_as_null: bool = True) -> None:
+        self.none_as_null = none_as_null
+        super().__init__(none_as_null=none_as_null)
+
     def load_dialect_impl(self, dialect: Any) -> Any:
         if dialect.name == "postgresql":
-            return dialect.type_descriptor(JSONB())
-        return dialect.type_descriptor(JSON())
+            return dialect.type_descriptor(JSONB(none_as_null=self.none_as_null))
+        return dialect.type_descriptor(JSON(none_as_null=self.none_as_null))
 
 
 class CIPHERTEXT(TypeDecorator[Any]):
