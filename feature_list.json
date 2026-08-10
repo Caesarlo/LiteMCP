@@ -1470,7 +1470,7 @@
       "area": "security",
       "title": "实现版本化秘密加密",
       "behavior": "服务秘密通过 MultiFernet 加密，支持当前密钥解密和旧密钥轮换。负向：用已轮换掉的旧密钥单独解密必须失败；密文不得包含可逆的明文子串；缺失当前密钥时启动必须快速失败而不是静默用旧密钥当前密钥。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M0-ENV-001"
       ],
@@ -1486,14 +1486,31 @@
           "expected": "behavior 中的每条负向用例都有对应测试且失败路径符合预期，而非仅验证正向加解密往返"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/security/test_encryption.py -q",
+          "result": "7 passed. Covers MultiFernet construction, current-key encryption, old-key rotation decryption, retired-key rejection, ciphertext plaintext non-disclosure, missing current-key fail-fast, and blank current-key rejection. The initial test-writer import path was corrected from app.security to litemcp.security before the expected RED run.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "cd backend && .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m pytest -q",
+          "result": "ruff clean; mypy clean; full backend suite 282 passed. The full suite was rerun outside the sandbox to avoid Windows temp-directory permission errors.",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/src/litemcp/security/__init__.py",
+          "backend/src/litemcp/security/encryption.py",
+          "backend/tests/security/test_encryption.py"
+        ],
         "commits": []
       },
       "blocker": null,

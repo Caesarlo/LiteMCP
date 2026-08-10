@@ -49,6 +49,25 @@
 - Files changed: `backend/src/litemcp/db/models.py`, `backend/migrations/versions/m1_model_008_audit_outbox.py`, `backend/tests/db/test_models_audit_outbox.py`, `feature_list.json`, `progress.md`.
 - Next action: `M1-SEC-001` (版本化秘密加密，priority 111), the next highest-priority ready feature.
 
+### Session 025 · 2026-08-10
+
+#### Checkpoint 57 · M1-SEC-001 activated
+
+- Feature: `M1-SEC-001` (版本化秘密加密).
+- Status change: `not_started` → `in_progress`.
+- Baseline: dependency `M0-ENV-001` is passing; no `tests/security/test_encryption.py` or encryption implementation exists yet. Contract requires MultiFernet encryption with current-key writes, old-key reads during rotation, failure with only a retired key, ciphertext without reversible plaintext, and fast startup failure when the current key is missing.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (26 passing, 1 in_progress, 0 blocked).
+- Next action: dispatch the isolated test-writer to create `backend/tests/security/test_encryption.py` from the feature contract and architecture references only.
+
+#### Checkpoint 58 · M1-SEC-001 passed
+
+- Feature: `M1-SEC-001` (版本化秘密加密).
+- Status change: `in_progress` → `passing`.
+- Result: Added `SecretEncryption` and `MissingCurrentKeyError` under `litemcp.security`. The service uses `MultiFernet` with the first key as the active encryption key and remaining keys as rotation history; missing or blank active keys fail fast.
+- Verification: focused encryption contract `7 passed`; `ruff check src tests` clean; `mypy src` clean; full backend suite `282 passed`. The full suite required the sandbox-external execution path because the sandbox denied pytest's Windows temporary directory.
+- Files changed: `backend/src/litemcp/security/__init__.py`, `backend/src/litemcp/security/encryption.py`, `backend/tests/security/test_encryption.py`, `feature_list.json`, `progress.md`.
+- Next action: `M1-SEC-002` (API Key 摘要存储，priority 112), the next highest-priority ready feature.
+
 #### Checkpoint 56 · M1-MODEL-008 implemented and passed its gate
 
 - Feature: `M1-MODEL-008`
