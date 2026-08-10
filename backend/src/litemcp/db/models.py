@@ -1,18 +1,19 @@
 """User, team, team-membership, service, service-config-revision, toolset,
-MCP-tool, service-artifact, build-run, service-condition and MCP-task domain
-models (M1-MODEL-001..006).
+MCP-tool, service-artifact, build-run, service-condition, MCP-task, permission
+and API-key domain models (M1-MODEL-001..007).
 
 Maps the ``user``, ``team``, ``team_membership``, ``mcp_service``,
 ``service_config_revision``, ``toolset``, ``mcp_tool``, ``service_artifact``,
-``build_run``, ``service_condition`` and ``mcp_task`` tables declared in
-docs/architecture/01-data-model.md §5.1, §5.16, §5.17, §5.2, §5.3, §5.7,
-§5.8, §5.5, §5.6, §5.11 and §5.15 onto SQLAlchemy ORM classes. Every mutable
-table carries the generic audit fields (§3.2) and its DB-level UNIQUE / CHECK
-/ FK constraints (L63: enforcement lives in the database, never in a
-Python-side value check); immutable config revisions carry generic CREATE
-fields only — no ``updated_*`` / ``row_version`` (§5.3), and ``mcp_task``
-carries the MCP time fields (``created_at`` / ``last_updated_at`` /
-``expires_at``) rather than the §3.2 audit set (§5.15).
+``build_run``, ``service_condition``, ``mcp_task``, ``mcp_service_permission``
+and ``api_key`` tables declared in docs/architecture/01-data-model.md §5.1,
+§5.16, §5.17, §5.2, §5.3, §5.7, §5.8, §5.5, §5.6, §5.11, §5.15, §5.12 and
+§5.13 onto SQLAlchemy ORM classes. Every mutable table carries the generic
+audit fields (§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63:
+enforcement lives in the database, never in a Python-side value check);
+immutable config revisions carry generic CREATE fields only — no ``updated_*``
+/ ``row_version`` (§5.3), and ``mcp_task`` carries the MCP time fields
+(``created_at`` / ``last_updated_at`` / ``expires_at``) rather than the §3.2
+audit set (§5.15).
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
 ``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
@@ -857,3 +858,165 @@ class McpTask(Base):
     )
     expires_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
     poll_interval_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+
+class McpServicePermission(Base):
+    """An explicit object-level visibility or write grant (§5.12).
+
+    There are no implicit service visibility defaults: an ``everyone`` row is
+    itself the explicit public-read grant. ``principal_key`` gives every grant
+    a portable, non-null uniqueness value across PostgreSQL and MySQL.
+    """
+
+    __tablename__ = "mcp_service_permission"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id",
+            "principal_key",
+            name="uq_mcp_service_permission_service_principal_key",
+        ),
+        CheckConstraint(
+            "principal_type IN ('user', 'team', 'everyone')",
+            name="ck_mcp_service_permission_principal_type",
+        ),
+        CheckConstraint(
+            "role IN ('editor', 'viewer')",
+            name="ck_mcp_service_permission_role",
+        ),
+        CheckConstraint(
+            "(principal_type='user' and user_id is not null) or "
+            "(principal_type!='user' and user_id is null)",
+            name="ck_mcp_service_permission_user_id_consistency",
+        ),
+        CheckConstraint(
+            "(principal_type='team' and team_id is not null) or "
+            "(principal_type!='team' and team_id is null)",
+            name="ck_mcp_service_permission_team_id_consistency",
+        ),
+        CheckConstraint(
+            "(principal_type='user') or (role='viewer')",
+            name="ck_mcp_service_permission_role_scope",
+        ),
+        Index(
+            "ix_mcp_service_permission_service_principal_type",
+            "service_id",
+            "principal_type",
+        ),
+        Index(
+            "ix_mcp_service_permission_user_role_service",
+            "user_id",
+            "role",
+            "service_id",
+        ),
+        Index(
+            "ix_mcp_service_permission_team_service",
+            "team_id",
+            "service_id",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    principal_type: Mapped[str] = mapped_column(
+        ENUM_CODE("user", "team", "everyone"), nullable=False
+    )
+    user_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("user.id"), nullable=True
+    )
+    team_id: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("team.id"), nullable=True
+    )
+    role: Mapped[str] = mapped_column(ENUM_CODE("editor", "viewer"), nullable=False)
+    principal_key: Mapped[str] = mapped_column(String(80), nullable=False)
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class ApiKey(Base):
+    """Persisted non-secret API-key metadata and revocation state (§5.13).
+
+    The plaintext key is never a model field. Only its selector, display
+    prefix and one-way digest are persisted, together with lifecycle metadata.
+    """
+
+    __tablename__ = "api_key"
+    __table_args__ = (
+        UniqueConstraint("public_id", name="uq_api_key_public_id"),
+        UniqueConstraint("secret_hash", name="uq_api_key_secret_hash"),
+        CheckConstraint(
+            "status IN ('active', 'revoked')", name="ck_api_key_status"
+        ),
+        CheckConstraint(
+            "expires_at IS NULL OR expires_at > created_at",
+            name="ck_api_key_expires_after_created",
+        ),
+        CheckConstraint(
+            "(status!='revoked') OR (revoked_at IS NOT NULL)",
+            name="ck_api_key_revoked_requires_revoked_at",
+        ),
+        CheckConstraint(
+            "rate_limit_qps IS NULL OR rate_limit_qps > 0",
+            name="ck_api_key_rate_limit_qps_positive",
+        ),
+        CheckConstraint(
+            "rate_limit_burst IS NULL OR rate_limit_burst >= 1",
+            name="ck_api_key_rate_limit_burst_min",
+        ),
+        Index(
+            "ix_api_key_service_status_expires_at",
+            "service_id",
+            "status",
+            "expires_at",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    service_id: Mapped[uuid.UUID] = mapped_column(
+        ID(), ForeignKey("mcp_service.id", ondelete="RESTRICT"), nullable=False
+    )
+    public_id: Mapped[str] = mapped_column(String(32), nullable=False)
+    display_prefix: Mapped[str] = mapped_column(String(32), nullable=False)
+    secret_hash: Mapped[str] = mapped_column(String(64), nullable=False)
+    hash_algorithm: Mapped[str] = mapped_column(String(32), nullable=False)
+    pepper_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    status: Mapped[str] = mapped_column(
+        ENUM_CODE("active", "revoked"), nullable=False
+    )
+    expires_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    last_used_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    last_used_ip_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(UTC_TS(), nullable=True)
+    revoked_by: Mapped[uuid.UUID | None] = mapped_column(
+        ID(), ForeignKey("user.id"), nullable=True
+    )
+    rate_limit_qps: Mapped[Decimal | None] = mapped_column(
+        Numeric(10, 2), nullable=True
+    )
+    rate_limit_burst: Mapped[int | None] = mapped_column(Integer, nullable=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    created_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
+    row_version: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=1, server_default="1"
+    )
