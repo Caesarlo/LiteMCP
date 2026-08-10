@@ -1298,7 +1298,7 @@
       "area": "data",
       "title": "实现 Operation 与 Runtime Condition 模型",
       "behavior": "异步操作进度和真实运行条件独立于用户期望配置保存。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002"
       ],
@@ -1309,18 +1309,44 @@
           "expected": "状态边界与时间字段测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_operation_condition",
+          "result": "RED confirmed in controlling session first (24 failed, all on 'service_condition'/'mcp_task' table not registered / KeyError — the missing models, not a typo/setup; the test file's MySQL provisioning had a %-escaping setup bug fixed by the controller so both dialects fail for the RIGHT reason). After implementer + controller setup-helper fix: 24 passed (6 offline structural + 9 live x 2 dialects, no skips). Offline: service_condition (id, service_id FK->mcp_service, type enum ConfigReady/BuildReady/ToolsReady/RuntimeHealthy/UpstreamReachable + CHECK, status enum true/false/unknown + CHECK, reason String(64), message String(2048) nullable, observed_generation BigInteger, last_transition_at UTC_TS NOT NULL, last_probe_at UTC_TS nullable, full §3.2 audit incl. row_version, UNIQUE(service_id,type), no soft-delete) and mcp_task (id PK also used as taskId, service_id FK->mcp_service NOT NULL, tool_id FK->mcp_tool NOT NULL, session_id_hash String(64) nullable, downstream_task_id String(255) nullable, status enum working/input_required/completed/failed/cancelled + CHECK, status_message String(2048) nullable, result_artifact_id FK->service_artifact nullable, created_at/last_updated_at UTC_TS NOT NULL [MCP time fields — NO created_by/updated_by/row_version], expires_at UTC_TS nullable, poll_interval_ms Integer nullable CHECK >0, NO unique constraints). Live per dialect: condition round-trip with microsecond-precision transition/probe times; all 5 type x status codes round-trip; UNIQUE (service_id,type) collision rejected; bad type/status CHECK rejections; missing-service FK + missing type NOT NULL rejections; mcp_task round-trip with session hash/downstream id/status message/result artifact/expires/poll interval at microsecond precision; all nullable fields NULL on insert; bad status + poll_interval_ms 0/-5 CHECK rejections; dangling service/tool/result FK rejections + missing service/tool NOT NULL rejections.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 181 passed (157 existing + 24 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_006_condition_task (down_revision = m1_model_005_artifact_build).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 181 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (23 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_006_condition_task.py",
+          "backend/tests/db/test_models_operation_condition.py"
+        ],
+        "commits": [
+          "3603aa9",
+          "7623d10"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写契约套件（§5.11 service_condition + §5.15 mcp_task），控制会话确认 RED（24 全败于缺失表）。实现者子代理独立落地 ServiceCondition/McpTask 模型 + m1_model_006_condition_task 迁移。控制会话裁定三处测试写手缺陷：(1) 枚举列 type/status 断言放宽为 (String, ENUM_CODE)（ENUM_CODE 非 String 子类，仓库约定用 ENUM_CODE，与 M1-MODEL-001..005 一致）；(2) MySQL 供给 _grant_mysql_app_user 中字面 '%'（'litemcp'@'%'）与 aiomysql 的 %-格式化冲突（TypeError），escape 为 %%；(3) 三个父行 helper（_insert_toolset/_insert_tool/_insert_artifact）省略前序 feature 表的 NOT NULL updated_at/updated_by/row_version 导致 NOT NULL 违反（updated_by 无默认值；updated_at/row_version 靠模型 Python 默认自动填充），补齐与既有契约 helper 一致。范围边界/裁决：mcp_task 的 toolset_id/tool_id 文档写法裁定为单列 tool_id FK→mcp_tool.id（固定任务创建时的工具版本）；mcp_task 用 created_at/last_updated_at（MCP 时间字段）而非标准 §3.2 审计集（无 created_by/updated_by/row_version），且无任何 UNIQUE 约束；终态不可转回工作态/过期任务 GC 均为应用层，无 DB trigger。"
     },
     {
       "id": "M1-MODEL-007",
