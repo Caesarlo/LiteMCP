@@ -1241,7 +1241,7 @@
       "area": "data",
       "title": "实现 Artifact 与 Build 模型",
       "behavior": "代码包、构建产物、摘要、状态和日志引用能够持久化。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002"
       ],
@@ -1252,18 +1252,44 @@
           "expected": "制品与构建约束通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_artifact_build",
+          "result": "RED confirmed in controlling session first (32 failed, all on 'service_artifact'/'build_run' not registered on Base.metadata / KeyError — the missing models, not a typo/setup). After implementer: 32 passed (16 offline structural + 8 live on PostgreSQL + 8 live on MySQL, no skips). Offline: service_artifact (id, service_id FK->mcp_service, config_revision_id FK->service_config_revision nullable, kind/storage_backend/state ENUM_CODE+CHECK, object_key String(1024), sha256 String(64), size_bytes BigInteger CHECK>=0, media_type String(128), format String(32), scan_report JSON_DOC nullable, retain_until UTC_TS nullable, full §3.2 audit, UNIQUE(storage_backend,object_key)) and build_run (id, service_id FK->mcp_service, config_revision_id FK->service_config_revision NOT NULL, source_artifact_id FK->service_artifact NOT NULL, strategy ENUM_CODE fastmcp/descriptor/custom_adapter + CHECK, parser_version String(64), base_image_digest String(255), dependency_digest String(64) nullable, status ENUM_CODE queued/building/validating/succeeded/failed/cancelled/superseded + CHECK, output_artifact_id/log_artifact_id FK->service_artifact nullable, discovered_descriptor JSON_DOC nullable, error_code String(64) nullable, error_summary String(2048) nullable, started_at/finished_at UTC_TS nullable, full §3.2 audit, non-unique INDEX (service_id,status,created_at)). Live per dialect: artifact round-trip incl. scan_report/retain_until; all 14 documented enum values (kind 5 / storage_backend 4 / state 5) insert; UNIQUE (storage_backend,object_key) collision rejected + different key allowed; CHECK rejections (bad kind/storage_backend/state, size_bytes=-1); build_run round-trip with output/log artifacts + discovered_descriptor + lifecycle times; all 10 strategy/status values insert; output/log nullable + non-unique index allows duplicate (service_id,status,created_at); dangling source_artifact_id FK rejected; strategy/status CHECK rejections.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 157 passed (125 existing + 32 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_005_artifact_build (down_revision = m1_model_004_toolset).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 157 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (22 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/migrations/versions/m1_model_005_artifact_build.py",
+          "backend/tests/db/test_models_artifact_build.py"
+        ],
+        "commits": [
+          "f325d3f",
+          "a1e20b2"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写契约套件（§5.5 service_artifact + §5.6 build_run），控制会话确认 RED（32 全败于缺失表）。实现者子代理独立落地 ServiceArtifact/BuildRun 模型 + m1_model_005_artifact_build 迁移。跨方言适配（记录为支持性决定）：object_key 为 VARCHAR(1024) 且参与 UNIQUE(storage_backend, object_key)；MySQL utf8mb4 下 1024 字符 = 4096 字节超过 InnoDB 3072 字节索引上限（errno 1071），迁移中对该列在 MySQL 上用 String(1024, collation='latin1_bin') 变体（单字节，保留全列唯一性），PostgreSQL 保持普通 VARCHAR(1024)；模型元数据保持普通 String(1024)，离线契约长度断言不受影响（DDL 以迁移为准，仓库约定禁用空 autogenerate）。范围边界：strategy 的 descriptor/custom_adapter 按文档「预留」纳入 CHECK（测试写手选择允许全部三个，实现一致）；GC 安全（仅删除 gc_pending / 过 retain_until / 无引用）是应用层，无 DB trigger；build_run 的三个 artifact FK 均为普通单列 FK（无复合归属约束，文档未要求）。"
     },
     {
       "id": "M1-MODEL-006",
