@@ -1008,7 +1008,7 @@
       "area": "data",
       "title": "实现用户与团队模型",
       "behavior": "用户、团队、成员关系和生命周期字段满足双方言约束。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-DB-002",
         "M1-DB-003"
@@ -1020,18 +1020,46 @@
           "expected": "双方言模型契约通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_user_team",
+          "result": "RED confirmed in controlling session first (ModuleNotFoundError: No module named 'litemcp.db.models' — the missing model module). After implementer: 13 passed (1 offline structural + 12 live checks on BOTH real PostgreSQL and MySQL via fresh-DB upgrade head). Offline: Base.metadata contains user/team/team_membership; columns/lengths/litemcp.db.types types; UNIQUE on username_normalized/key_normalized/(team_id,user_id); portable CHECK enumerating every allowed code on role/status/team_role; FK team.id/user.id; no deleted_at/uniqueness_scope. Live per dialect (dedicated DB, upgrade head, then ORM via AsyncSessionFactory): ID canonical-UUID round-trip, UTC_TS same instant (MySQL read re-attaches UTC), LONG_TEXT exact, failed_login_count default 0; DB-level rejection of duplicate username_normalized, duplicate (team_id,user_id), disallowed role/status/team_role codes, orphan membership FKs; lifecycle writes disabled/locked user and archived team round-trip. Windows-equivalent of declared uv run pytest (uv unavailable in WSL bash).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/python.exe -m ruff check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 73 passed (60 existing + 13 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_001_user_team (down_revision = m1_db_003_bootstrap_root).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "node --test scripts/validate-make-help.test.js (cmd AND sh branches); make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make-help gate 7/7 pass in BOTH the PowerShell/cmd environment and Git Bash/sh environment (M0-CMD-001 intact) after the controller fixed a `<module>` angle-bracket regression the gate caught in the new help line — cmd treats `<` as input redirection, so make help exited non-zero under cmd; reworded to TEST=suite_name. make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 73 tests + frontend eslint/tsc/vitest/vite build). feature-list validator exits 0 (18 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/src/litemcp/db/session.py",
+          "backend/migrations/versions/m1_model_001_user_team.py",
+          "backend/tests/db/test_models_user_team.py",
+          "Makefile"
+        ],
+        "commits": [
+          "6b46443",
+          "0505ea3"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写 tests/db/test_models_user_team.py（离线结构契约 + 双方言 live 契约，含 UNIQUE/CHECK/FK 的数据库层拒绝用例），控制会话确认 RED（模块缺失），实现者子代理独立落地 models.py + Alembic 迁移 + make test-db-contract 门禁。控制会话裁定两处支持改动：1) session.py 增加 expire_on_commit=False（M1-DB-001 已 passing 文件的窄范围改动）——契约测试在会话释放后读取已提交对象的属性，默认 expire_on_commit=True 会触发 DetachedInstanceError；该设置是常见生产配置，不改变 M1-DB-001 的会话释放/独立会话契约（完整套件 73 通过验证）；2) TeamMembership 声明 relationship() 以显式声明 FK 依赖，保证 user/team 先于 membership flush。实现者引入的 make help 新行含字面 <module>，cmd 食谱 shell 将其解析为输入重定向导致 make help 失败——被 M0-CMD-001 门禁捕获，控制会话改为 TEST=suite_name 修复（两分支均验证）。"
     },
     {
       "id": "M1-MODEL-002",
