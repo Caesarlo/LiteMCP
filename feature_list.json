@@ -1126,7 +1126,7 @@
       "area": "data",
       "title": "实现配置 Revision 模型",
       "behavior": "服务配置采用不可变 revision，并保存加密配置与内容摘要。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002"
       ],
@@ -1137,18 +1137,45 @@
           "expected": "不可变性和归属约束通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=models_config_revision",
+          "result": "RED confirmed in controlling session first (20 failed, all on 'service_config_revision is not registered on Base.metadata' / KeyError — the missing ServiceConfigRevision model, not a typo/setup). After implementer + controller adjudication: 20 passed (10 offline structural + 10 live on BOTH real PostgreSQL and MySQL via fresh-DB upgrade head, no skips). Offline: Base.metadata registers service_config_revision; complete 16-column set with portable kinds (id/service_id/secret_blob_id ID, created_at/activated_at/superseded_at UTC_TS, public_config/source_descriptor/validation_report JSON_DOC, config_kind/source_mode/state ENUM_CODE, config_digest String(64), generation BigInteger, schema_version Integer); UNIQUE (service_id,generation) + UNIQUE (id,service_id); service_id FK->mcp_service.id RESTRICT; secret_blob_id ID-typed nullable WITHOUT FK (target service_secret is a later feature); NO updated_at/updated_by columns (immutable create-fields-only, §5.3 L188); created_by String(128) (uniform §3.2 audit convention); CHECK enumerations on config_kind/source_mode/state. Live per dialect: full-field insert round-trips (secret_blob_id, source_descriptor, validation_report, activated_at/superseded_at, digest); duplicate (service_id,generation) rejected; FK rejects missing service; public_config=None and config_digest=None rejected (NOT NULL); deleting a referenced service blocked (RESTRICT).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src; .venv/Scripts/python.exe -m alembic heads",
+          "result": "Full backend suite 113 passed (93 existing + 20 model contract), no regression. ruff clean. mypy clean (10 source files). alembic heads → exactly one head: m1_model_003_config_revision (down_revision = m1_model_002_service).",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "make ci-fast; node scripts/validate-feature-list.js",
+          "result": "make ci-fast exit 0 (all seven legs: backend ruff/mypy/pytest 113 tests + frontend eslint/tsc/vitest 7/vite build). feature-list validator exits 0 (20 passing, 1 in_progress before transition).",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/src/litemcp/db/types.py",
+          "backend/migrations/versions/m1_model_003_config_revision.py",
+          "backend/tests/db/test_models_config_revision.py"
+        ],
+        "commits": [
+          "cef84e2",
+          "e23b2ec"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按 AGENTS.md 隔离 TDD 拆分执行：测试写手子代理仅依据 behavior/verification/source_refs 编写契约套件（§5.3 不可变字段/生命周期字段/约束），控制会话确认 RED（20 全败于缺失表）。实现者子代理独立落地 ServiceConfigRevision 模型 + m1_model_003_config_revision 迁移 + JSON_DOC none_as_null 支持改动。控制会话裁定三处：(1) created_by 对齐统一 §3.2 约定 String(128)（测试写手最初定为 ID 类型，审计身份非实体 FK）；(2) 枚举列不固定精确 varchar 宽度（遵循 ENUM_CODE max+16 约定，与 M1-MODEL-001/002 一致），只固定 CHECK 内容；(3) 测试辅助函数 table.indexes 迭代方式修正（SQLAlchemy 2.0.51 Table.indexes 为 Set，无 .values()）。窄范围支持改动（已记录）：backend/src/litemcp/db/types.py 的 JSON_DOC 默认 none_as_null=True —— 顶层 Python None 绑定为 SQL NULL 而非 JSON 字面量 null，使 NOT NULL JSON 列可在数据库层拒绝 None（§3.2 L63 约束落在数据库）；既有套件（test_types/test_models_user_team/test_models_service/test_migrations）无回归。secret_blob_id FK 目标 service_secret 表为后续 feature，本 feature 仅固定存在性/ID 类型/可空性（沿用 M1-MODEL-002 active 指针先例）；mcp_service 上 §5.2 L165 的复合 FK (active_config_revision_id, id) 依赖本表 UNIQUE(id,service_id)，接线留给后续 feature。"
     },
     {
       "id": "M1-MODEL-004",
