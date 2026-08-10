@@ -1523,7 +1523,7 @@
       "area": "security",
       "title": "实现 API Key 摘要存储",
       "behavior": "API Key 明文仅创建时返回，数据库只保存不可逆摘要与安全前缀。负向：数据库行、日志、审计事件、异常堆栈中都不得出现明文；重复请求同一创建接口不得返回同一明文两次；摘要校验必须使用常量时间比较。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-007"
       ],
@@ -1539,14 +1539,31 @@
           "expected": "behavior 中的每条负向用例都有对应测试，而非仅验证摘要能校验成功"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest tests/security/test_api_key_hash.py -q",
+          "result": "6 passed. Covers one-time plaintext response, digest/prefix-only persistence, fresh plaintext on repeated creation, plaintext exclusion from rows/logs/audit/exceptions, constant-time hmac.compare_digest verification, and fail-closed tampered-key handling. The initial test-writer import path was corrected from app.security to litemcp.security before the expected RED run.",
+          "recorded_at": "2026-08-10"
+        },
+        {
+          "kind": "regression",
+          "command": "cd backend && .venv/Scripts/python.exe -m pytest -q; .venv/Scripts/ruff.exe check src tests; .venv/Scripts/python.exe -m mypy src",
+          "result": "Full backend suite 288 passed; ruff clean; mypy clean. Full security suite: 13 passed.",
+          "recorded_at": "2026-08-10"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/src/litemcp/security/__init__.py",
+          "backend/src/litemcp/security/api_keys.py",
+          "backend/tests/security/test_api_key_hash.py"
+        ],
         "commits": []
       },
       "blocker": null,

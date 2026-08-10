@@ -68,6 +68,26 @@
 - Files changed: `backend/src/litemcp/security/__init__.py`, `backend/src/litemcp/security/encryption.py`, `backend/tests/security/test_encryption.py`, `feature_list.json`, `progress.md`.
 - Next action: `M1-SEC-002` (API Key 摘要存储，priority 112), the next highest-priority ready feature.
 
+### Session 026 · 2026-08-10
+
+#### Checkpoint 59 · M1-SEC-002 activated
+
+- Feature: `M1-SEC-002` (API Key 摘要存储).
+- Status change: `not_started` → `in_progress`.
+- Baseline: dependency `M1-MODEL-007` is passing and provides the non-secret API Key metadata columns (`public_id`, `display_prefix`, `secret_hash`, `hash_algorithm`, `pepper_version`). No application-layer API Key hashing/verification service or `tests/security/test_api_key_hash.py` exists yet.
+- Contract: plaintext is returned only once at creation; only an irreversible digest and safe prefix are persisted; plaintext must not appear in DB rows, logs, audit events, or exception traces; repeated creation requests produce different plaintext keys; verification uses constant-time comparison.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (27 passing, 1 in_progress, 0 blocked).
+- Next action: dispatch the isolated test-writer to create `backend/tests/security/test_api_key_hash.py` from the feature contract and architecture references only.
+
+#### Checkpoint 60 · M1-SEC-002 passed
+
+- Feature: `M1-SEC-002` (API Key 摘要存储).
+- Status change: `in_progress` → `passing`.
+- Result: Added `ApiKeyService` and `CreatedApiKey` under `litemcp.security`. Creation returns plaintext once, persists only a SHA-256 digest/public selector/display prefix, emits only redacted metadata, and sanitizes persistence failures. Verification parses the selector, checks active status, and uses `hmac.compare_digest`, failing closed on malformed/tampered keys or repository errors.
+- Verification: contract `6 passed`; full security suite `13 passed`; full backend suite `288 passed`; ruff clean; mypy clean. The initial test-writer import path was corrected from `app.security` to `litemcp.security` before the expected RED run.
+- Files changed: `backend/src/litemcp/security/api_keys.py`, `backend/src/litemcp/security/__init__.py`, `backend/tests/security/test_api_key_hash.py`, `feature_list.json`, `progress.md`.
+- Next action: `M1-SEC-003` (认证失败与安全审计原语，priority 113), the next highest-priority ready feature.
+
 #### Checkpoint 56 · M1-MODEL-008 implemented and passed its gate
 
 - Feature: `M1-MODEL-008`
