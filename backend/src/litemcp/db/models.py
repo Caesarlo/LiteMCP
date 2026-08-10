@@ -1,19 +1,22 @@
 """User, team, team-membership, service, service-config-revision, toolset,
-MCP-tool, service-artifact, build-run, service-condition, MCP-task, permission
-and API-key domain models (M1-MODEL-001..007).
+MCP-tool, service-artifact, build-run, service-condition, MCP-task, permission,
+API-key, audit-event and outbox domain models (M1-MODEL-001..008).
 
 Maps the ``user``, ``team``, ``team_membership``, ``mcp_service``,
 ``service_config_revision``, ``toolset``, ``mcp_tool``, ``service_artifact``,
-``build_run``, ``service_condition``, ``mcp_task``, ``mcp_service_permission``
-and ``api_key`` tables declared in docs/architecture/01-data-model.md §5.1,
-§5.16, §5.17, §5.2, §5.3, §5.7, §5.8, §5.5, §5.6, §5.11, §5.15, §5.12 and
-§5.13 onto SQLAlchemy ORM classes. Every mutable table carries the generic
+``build_run``, ``service_condition``, ``mcp_task``, ``mcp_service_permission``,
+``api_key``, ``audit_event`` and ``outbox`` tables declared in
+docs/architecture/01-data-model.md §5.1, §5.16, §5.17, §5.2, §5.3, §5.7, §5.8,
+§5.5, §5.6, §5.11, §5.15, §5.12, §5.13 and §5.14 (and 03-service-crud.md §6.3
+for ``outbox``) onto SQLAlchemy ORM classes. Every mutable table carries the generic
 audit fields (§3.2) and its DB-level UNIQUE / CHECK / FK constraints (L63:
 enforcement lives in the database, never in a Python-side value check);
 immutable config revisions carry generic CREATE fields only — no ``updated_*``
-/ ``row_version`` (§5.3), and ``mcp_task`` carries the MCP time fields
+/ ``row_version`` (§5.3), ``mcp_task`` carries the MCP time fields
 (``created_at`` / ``last_updated_at`` / ``expires_at``) rather than the §3.2
-audit set (§5.15).
+audit set (§5.15), and ``audit_event`` / ``outbox`` carry no §3.2 audit columns
+at all — ``audit_event`` IS the audit record and ``outbox`` is a
+delivery-work row written in the same transaction as the change it describes.
 
 Column types use only the portable logical types from ``litemcp.db.types`` —
 ``ID``, ``UTC_TS``, ``JSON_DOC``, ``LONG_TEXT``, ``ENUM_CODE`` and the generic
@@ -1019,4 +1022,131 @@ class ApiKey(Base):
     updated_by: Mapped[str] = mapped_column(String(128), nullable=False)
     row_version: Mapped[int] = mapped_column(
         Integer, nullable=False, default=1, server_default="1"
+    )
+
+
+class AuditEvent(Base):
+    """An append-only business-evidence record (§5.14).
+
+    ``audit_event`` records who did what to which resource, when, and with
+    what result, written in the same transaction as the business change it
+    documents (M1-MODEL-008). It is business evidence, not an application log:
+    rows are never updated or soft-deleted, so the table carries NO §3.2 audit
+    columns — the table itself is the audit record. ``previous_event_hash`` /
+    ``event_hash`` form an append-only hash chain. The ``metadata`` column is
+    declared under the non-reserved Python attribute ``meta`` because
+    ``metadata`` is a reserved name under the Declarative API; the DB column is
+    ``metadata`` and contract code reaches it through ``Table.c``.
+    """
+
+    __tablename__ = "audit_event"
+    __table_args__ = (
+        Index("ix_audit_event_occurred_at", "occurred_at"),
+        Index(
+            "ix_audit_event_service_occurred_at",
+            "service_id",
+            "occurred_at",
+        ),
+        Index(
+            "ix_audit_event_actor_occurred_at",
+            "actor_type",
+            "actor_id",
+            "occurred_at",
+        ),
+        CheckConstraint(
+            "actor_type IN ('user', 'api_key', 'system', 'anonymous')",
+            name="ck_audit_event_actor_type",
+        ),
+        CheckConstraint(
+            "result IN ('success', 'denied', 'failed')",
+            name="ck_audit_event_result",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False
+    )
+    request_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_type: Mapped[str] = mapped_column(
+        ENUM_CODE("user", "api_key", "system", "anonymous"), nullable=False
+    )
+    actor_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    action: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    service_id: Mapped[uuid.UUID | None] = mapped_column(ID(), nullable=True)
+    result: Mapped[str] = mapped_column(
+        ENUM_CODE("success", "denied", "failed"), nullable=False
+    )
+    reason_code: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    source_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    changes: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    meta: Mapped[dict | None] = mapped_column(
+        "metadata", JSON_DOC(), nullable=True
+    )
+    previous_event_hash: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    event_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class Outbox(Base):
+    """The controller-adjudicated transactional delivery queue (§6.3).
+
+    ``outbox`` buffers a business event for asynchronous delivery. The row is
+    written in the same transaction as the business change it describes, so the
+    two commit or roll back together (M1-MODEL-008). ``(service_id,
+    requested_generation, operation_kind)`` is the worker-task dedup key and is
+    UNIQUE; because NULL != NULL on both dialects, rows where any of the three
+    is NULL are not deduped. ``status`` defaults to ``pending`` and
+    ``attempt_count`` to 0. The row is delivery-work state, not a mutable
+    business entity, so it carries NO §3.2 audit columns.
+    """
+
+    __tablename__ = "outbox"
+    __table_args__ = (
+        UniqueConstraint(
+            "service_id",
+            "requested_generation",
+            "operation_kind",
+            name="uq_outbox_service_generation_operation",
+        ),
+        CheckConstraint(
+            "status IN ('pending', 'in_flight', 'done', 'failed')",
+            name="ck_outbox_status",
+        ),
+        CheckConstraint(
+            "attempt_count >= 0",
+            name="ck_outbox_attempt_count_non_negative",
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    service_id: Mapped[uuid.UUID | None] = mapped_column(ID(), nullable=True)
+    requested_generation: Mapped[int | None] = mapped_column(
+        BigInteger, nullable=True
+    )
+    operation_kind: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    payload: Mapped[dict | None] = mapped_column(JSON_DOC(), nullable=True)
+    status: Mapped[str] = mapped_column(
+        ENUM_CODE("pending", "in_flight", "done", "failed"),
+        nullable=False,
+        default="pending",
+        server_default="'pending'",
+    )
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0, server_default="0"
+    )
+    next_attempt_at: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(String(2048), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        UTC_TS(), nullable=False, default=_now_utc
+    )
+    processed_at: Mapped[datetime | None] = mapped_column(
+        UTC_TS(), nullable=True
     )
