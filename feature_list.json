@@ -1685,7 +1685,7 @@
       "area": "data",
       "title": "实现 row_version 乐观锁",
       "behavior": "管理写入携带版本，陈旧写入返回冲突且不覆盖新数据。",
-      "status": "not_started",
+      "status": "in_progress",
       "dependencies": [
         "M1-MODEL-002"
       ],

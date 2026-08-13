@@ -963,3 +963,11 @@
 - Result: Committed implementation, contract tests, feature evidence, and progress as `912ed47` (`feat(storage): add storage backend contract`).
 - Verification before commit: storage contract 7 passed; non-database backend regression 68 passed; ruff/mypy/feature validator/diff check clean.
 - Next action: push `912ed47`, then activate `M1-CONC-001`.
+
+#### Checkpoint 68 · M1-CONC-001 activated
+
+- Feature: `M1-CONC-001` (实现 row_version 乐观锁).
+- Status change: `not_started` → `in_progress`.
+- Contract: concurrent writes carry the current `row_version`; stale writes return a stable conflict and never overwrite newer data.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (30 passing, 1 in_progress, 0 blocked).
+- Next action: dispatch isolated test-writer for the optimistic-lock contract.
