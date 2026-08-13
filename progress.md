@@ -1011,3 +1011,10 @@
 - Result: Committed soft-delete implementation, migration, cross-dialect tests, and evidence as `4886c07`; repository annotation follow-up is `cee3a32`.
 - Verification before commit: `make test-db-contract TEST=soft_delete` → 11 passed; ruff clean; Alembic single head; feature validator passed.
 - Next action: push commits, then select the next ready feature. M1 has no remaining ready implementation feature; `M2-SCOPE-001` is the next dependency-ready planning item.
+
+#### Checkpoint 74 · M2 scope decomposed
+
+- Feature: M2 planning scope.
+- Result: Replaced `M2-SCOPE-001` with 18 session-sized `M2-AUTH`, `M2-WEB`, `M2-RBAC`, `M2-STEPUP`, and `M2-FE` features, each with explicit behavior, dependencies, and automated verification commands. Updated downstream M4–M7 dependencies from the removed placeholder to `M2-FE-004`.
+- Verification: `node scripts/validate-feature-list.js` → 56 features, 32 passing, 0 in_progress, 0 blocked; `git diff --check` clean.
+- Next action: commit and push the scope decomposition; next implementation candidate is `M2-AUTH-001`.
