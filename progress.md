@@ -932,3 +932,10 @@
 - Result: Independently re-ran the security contract in the controlling session: `backend/.venv/Scripts/python.exe -m pytest tests/security -q` → 18 passed; `ruff check src tests` → clean; `mypy src` → no issues; `node scripts/validate-feature-list.js` → 29 passing, 0 in_progress, 0 blocked; `git diff --check` → clean.
 - Note: pytest emitted one Windows cache-directory permission warning, with no test failure. The full backend/database regression remains outside this re-verification because PostgreSQL/MySQL services are not running.
 - Current state: `M1-SEC-003` remains `passing`; no active feature. Next action: `M1-STORAGE-001` (定义 StorageBackend 契约, priority 114).
+
+#### Checkpoint 64 · M1-SEC-003 committed
+
+- Feature: `M1-SEC-003`.
+- Result: Committed the verified implementation and tests as `c81cbc2` (`feat(security): add unified secret redaction`).
+- Verification before commit: security suite 18 passed; ruff clean; mypy clean; feature-list validator passed; `git diff --check` clean.
+- Next action: push `c81cbc2`, then activate `M1-STORAGE-001`.
