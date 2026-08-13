@@ -980,3 +980,11 @@
 - Verification: test collection passed (4 PostgreSQL/MySQL cases); ruff and mypy passed for changed files. Live tests could not run because Docker Desktop/database services are unavailable (connection refused on ports 5433/3307; Docker named pipe missing).
 - Status remains `in_progress` pending real PostgreSQL and MySQL verification.
 - Next action: restore Docker/database services and run `make test-db-contract TEST=optimistic_lock`.
+
+#### Checkpoint 70 · M1-CONC-001 passed
+
+- Feature: `M1-CONC-001` (实现 row_version 乐观锁).
+- Status change: `in_progress` → `passing`.
+- Result: Docker Desktop restored; atomic CAS repository and cross-dialect contract validated against fresh PostgreSQL and MySQL databases.
+- Verification: `make test-db-contract TEST=optimistic_lock` → 4 passed; ruff and mypy clean.
+- Next action: activate `M1-DELETE-001` (软删除与保留规则).

@@ -1685,7 +1685,7 @@
       "area": "data",
       "title": "实现 row_version 乐观锁",
       "behavior": "管理写入携带版本，陈旧写入返回冲突且不覆盖新数据。",
-      "status": "in_progress",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002"
       ],
@@ -1696,7 +1696,20 @@
           "expected": "双方言并发测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=optimistic_lock",
+          "result": "4 passed across fresh PostgreSQL and MySQL databases; concurrent same-version writes produce one winner and one CONCURRENT_MODIFICATION conflict, stale replay does not overwrite, and current writes increment row_version.",
+          "recorded_at": "2026-08-13"
+        },
+        {
+          "kind": "validation",
+          "command": "PowerShell 7: backend/.venv/Scripts/ruff.exe check backend/src/litemcp/db/repository.py backend/tests/db/test_optimistic_lock.py; backend/.venv/Scripts/python.exe -m mypy backend/src/litemcp/db/repository.py",
+          "result": "ruff clean; mypy clean.",
+          "recorded_at": "2026-08-13"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
@@ -1712,7 +1725,7 @@
         ]
       },
       "blocker": null,
-      "notes": "实现与测试已提交；真实 PostgreSQL/MySQL 验证因 Docker Desktop 不可用而阻塞，恢复服务后必须运行 make test-db-contract TEST=optimistic_lock。"
+      "notes": "按独立 TDD 流程完成；Docker 恢复后双方言 live contract 已通过。"
     },
     {
       "id": "M1-DELETE-001",
