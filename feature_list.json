@@ -1638,7 +1638,7 @@
       "area": "storage",
       "title": "定义 StorageBackend 契约",
       "behavior": "文件系统与未来 S3 实现共享 put/get/delete/digest 契约。",
-      "status": "not_started",
+      "status": "in_progress",
       "dependencies": [],
       "verification": [
         {

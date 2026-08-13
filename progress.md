@@ -939,3 +939,11 @@
 - Result: Committed the verified implementation and tests as `c81cbc2` (`feat(security): add unified secret redaction`).
 - Verification before commit: security suite 18 passed; ruff clean; mypy clean; feature-list validator passed; `git diff --check` clean.
 - Next action: push `c81cbc2`, then activate `M1-STORAGE-001`.
+
+#### Checkpoint 65 · M1-STORAGE-001 activated
+
+- Feature: `M1-STORAGE-001` (定义 StorageBackend 契约).
+- Status change: `not_started` → `in_progress`.
+- Contract: filesystem and future S3-compatible implementations share `put/get/delete/digest`; object keys are portable and content-addressed behavior is explicit.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (29 passing, 1 in_progress, 0 blocked).
+- Next action: dispatch an isolated test-writer for `backend/tests/storage/test_contract.py` using only the feature behavior, verification, and source references.
