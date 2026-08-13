@@ -1734,7 +1734,7 @@
       "area": "data",
       "title": "实现软删除与保留规则",
       "behavior": "服务软删除不破坏历史 revision、toolset、audit 和归属查询。",
-      "status": "not_started",
+      "status": "in_progress",
       "dependencies": [
         "M1-MODEL-002",
         "M1-MODEL-006"

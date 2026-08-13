@@ -988,3 +988,11 @@
 - Result: Docker Desktop restored; atomic CAS repository and cross-dialect contract validated against fresh PostgreSQL and MySQL databases.
 - Verification: `make test-db-contract TEST=optimistic_lock` → 4 passed; ruff and mypy clean.
 - Next action: activate `M1-DELETE-001` (软删除与保留规则).
+
+#### Checkpoint 71 · M1-DELETE-001 activated
+
+- Feature: `M1-DELETE-001` (实现软删除与保留规则).
+- Status change: `not_started` → `in_progress`.
+- Contract: service soft deletion preserves historical revisions, toolsets, audit, and ownership queries while removing the service from active access paths; restoration and uniqueness behavior follow the retention rules.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (31 passing, 1 in_progress, 0 blocked).
+- Next action: dispatch isolated test-writer for the soft-delete/restore/uniqueness contract.
