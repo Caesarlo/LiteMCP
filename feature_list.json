@@ -1734,7 +1734,7 @@
       "area": "data",
       "title": "实现软删除与保留规则",
       "behavior": "服务软删除不破坏历史 revision、toolset、audit 和归属查询。",
-      "status": "in_progress",
+      "status": "passing",
       "dependencies": [
         "M1-MODEL-002",
         "M1-MODEL-006"
@@ -1746,18 +1746,38 @@
           "expected": "删除、恢复和唯一性测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "make test-db-contract TEST=soft_delete",
+          "result": "11 passed across fresh PostgreSQL and MySQL databases; soft-delete visibility, active access exclusion, restore, name reuse/conflict, history/ownership/audit preservation, and deleted_at/uniqueness_scope constraints verified.",
+          "recorded_at": "2026-08-13"
+        },
+        {
+          "kind": "validation",
+          "command": "PowerShell 7: backend/.venv/Scripts/ruff.exe check backend/src/litemcp/db/models.py backend/src/litemcp/db/repository.py backend/tests/db/test_soft_delete.py; cd backend && .venv/Scripts/python.exe -m alembic heads",
+          "result": "ruff clean; Alembic has exactly one head: m1_delete_001_soft_delete.",
+          "recorded_at": "2026-08-13"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/models.py",
+          "backend/src/litemcp/db/repository.py",
+          "backend/migrations/versions/m1_delete_001_soft_delete.py",
+          "backend/tests/db/test_soft_delete.py"
+        ],
+        "commits": [
+          "cee3a32"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按独立 TDD 流程完成；MySQL CHECK 约束异常在测试中兼容其 OperationalError 映射。"
     },
     {
       "id": "M2-SCOPE-001",

@@ -206,6 +206,14 @@ class Service(Base):
             "AND stdio_concurrency_per_instance IS NULL))",
             name="ck_mcp_service_stdio_only_null_for_non_stdio",
         ),
+        # A portable replacement for a partial unique index: active rows must
+        # claim the LIVE scope, while tombstones must move to a distinct
+        # non-LIVE scope so the original name can be reused safely.
+        CheckConstraint(
+            "(deleted_at IS NULL AND uniqueness_scope = 'LIVE') OR "
+            "(deleted_at IS NOT NULL AND uniqueness_scope <> 'LIVE')",
+            name="ck_mcp_service_deleted_scope_consistency",
+        ),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(ID(), primary_key=True)

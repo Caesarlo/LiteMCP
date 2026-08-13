@@ -996,3 +996,11 @@
 - Contract: service soft deletion preserves historical revisions, toolsets, audit, and ownership queries while removing the service from active access paths; restoration and uniqueness behavior follow the retention rules.
 - Verification: `node scripts/validate-feature-list.js` passed before activation (31 passing, 1 in_progress, 0 blocked).
 - Next action: dispatch isolated test-writer for the soft-delete/restore/uniqueness contract.
+
+#### Checkpoint 72 · M1-DELETE-001 passed
+
+- Feature: `M1-DELETE-001` (实现软删除与保留规则).
+- Status change: `in_progress` → `passing`.
+- Result: Added portable `deleted_at`/`uniqueness_scope` consistency constraint and migration; soft-delete contract preserves historical revision/toolset/team/audit rows and enforces restore/name conflict semantics.
+- Verification: `make test-db-contract TEST=soft_delete` → 11 passed on fresh PostgreSQL and MySQL; ruff clean; Alembic single head confirmed.
+- Next action: commit and push M1-DELETE-001, then select the next ready feature or milestone scope decomposition.
