@@ -971,3 +971,12 @@
 - Contract: concurrent writes carry the current `row_version`; stale writes return a stable conflict and never overwrite newer data.
 - Verification: `node scripts/validate-feature-list.js` passed before activation (30 passing, 1 in_progress, 0 blocked).
 - Next action: dispatch isolated test-writer for the optimistic-lock contract.
+
+#### Checkpoint 69 · M1-CONC-001 implementation slice
+
+- Feature: `M1-CONC-001`.
+- Result: Isolated test-writer added `backend/tests/db/test_optimistic_lock.py`; implementer added `ServiceRepository.update_with_row_version` and `ConcurrentModificationError` with atomic compare-and-swap semantics.
+- RED: direct import initially failed with `ModuleNotFoundError: litemcp.db.repository`.
+- Verification: test collection passed (4 PostgreSQL/MySQL cases); ruff and mypy passed for changed files. Live tests could not run because Docker Desktop/database services are unavailable (connection refused on ports 5433/3307; Docker named pipe missing).
+- Status remains `in_progress` pending real PostgreSQL and MySQL verification.
+- Next action: restore Docker/database services and run `make test-db-contract TEST=optimistic_lock`.
