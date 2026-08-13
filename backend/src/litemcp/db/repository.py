@@ -23,7 +23,7 @@ __all__ = ["ConcurrentModificationError", "ServiceRepository"]
 class ConcurrentModificationError(RuntimeError):
     """Raised when a service update uses a stale ``row_version``."""
 
-    code = "CONCURRENT_MODIFICATION"
+    code: str = "CONCURRENT_MODIFICATION"
 
     def __init__(self, message: str = "service was modified concurrently") -> None:
         super().__init__(message)
