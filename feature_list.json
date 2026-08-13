@@ -1671,7 +1671,9 @@
           "backend/src/litemcp/storage.py",
           "backend/tests/storage/test_contract.py"
         ],
-        "commits": []
+        "commits": [
+          "912ed47"
+        ]
       },
       "blocker": null,
       "notes": "完整 backend/tests 回归在 120 秒内因现有数据库相关测试错误/超时未完成；数据库矩阵仍需在 PostgreSQL/MySQL 可用时补跑。"

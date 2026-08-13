@@ -956,3 +956,10 @@
 - Verification: focused storage contract 7 passed; ruff clean; mypy clean; non-database backend regression 68 passed. Full backend regression timed out after 120 seconds with existing database-test errors/timeouts and is recorded as incomplete; no full DB pass is claimed.
 - Files: `backend/src/litemcp/storage.py`, `backend/tests/storage/test_contract.py`, `feature_list.json`, `progress.md`.
 - Next action: commit and push the storage feature, then activate `M1-CONC-001`.
+
+#### Checkpoint 67 · M1-STORAGE-001 committed
+
+- Feature: `M1-STORAGE-001`.
+- Result: Committed implementation, contract tests, feature evidence, and progress as `912ed47` (`feat(storage): add storage backend contract`).
+- Verification before commit: storage contract 7 passed; non-database backend regression 68 passed; ruff/mypy/feature validator/diff check clean.
+- Next action: push `912ed47`, then activate `M1-CONC-001`.
