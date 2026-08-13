@@ -1004,3 +1004,10 @@
 - Result: Added portable `deleted_at`/`uniqueness_scope` consistency constraint and migration; soft-delete contract preserves historical revision/toolset/team/audit rows and enforces restore/name conflict semantics.
 - Verification: `make test-db-contract TEST=soft_delete` → 11 passed on fresh PostgreSQL and MySQL; ruff clean; Alembic single head confirmed.
 - Next action: commit and push M1-DELETE-001, then select the next ready feature or milestone scope decomposition.
+
+#### Checkpoint 73 · M1-DELETE-001 committed
+
+- Feature: `M1-DELETE-001`.
+- Result: Committed soft-delete implementation, migration, cross-dialect tests, and evidence as `4886c07`; repository annotation follow-up is `cee3a32`.
+- Verification before commit: `make test-db-contract TEST=soft_delete` → 11 passed; ruff clean; Alembic single head; feature validator passed.
+- Next action: push commits, then select the next ready feature. M1 has no remaining ready implementation feature; `M2-SCOPE-001` is the next dependency-ready planning item.
