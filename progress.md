@@ -947,3 +947,12 @@
 - Contract: filesystem and future S3-compatible implementations share `put/get/delete/digest`; object keys are portable and content-addressed behavior is explicit.
 - Verification: `node scripts/validate-feature-list.js` passed before activation (29 passing, 1 in_progress, 0 blocked).
 - Next action: dispatch an isolated test-writer for `backend/tests/storage/test_contract.py` using only the feature behavior, verification, and source references.
+
+#### Checkpoint 66 · M1-STORAGE-001 passed
+
+- Feature: `M1-STORAGE-001` (定义 StorageBackend 契约).
+- Status change: `in_progress` → `passing`.
+- Result: Added `FileSystemStorageBackend` with portable object-key validation and shared `put/get/delete/digest` boundary. Contract tests include an interchangeable S3-compatible in-memory fake.
+- Verification: focused storage contract 7 passed; ruff clean; mypy clean; non-database backend regression 68 passed. Full backend regression timed out after 120 seconds with existing database-test errors/timeouts and is recorded as incomplete; no full DB pass is claimed.
+- Files: `backend/src/litemcp/storage.py`, `backend/tests/storage/test_contract.py`, `feature_list.json`, `progress.md`.
+- Next action: commit and push the storage feature, then activate `M1-CONC-001`.

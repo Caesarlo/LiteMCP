@@ -1638,7 +1638,7 @@
       "area": "storage",
       "title": "定义 StorageBackend 契约",
       "behavior": "文件系统与未来 S3 实现共享 put/get/delete/digest 契约。",
-      "status": "in_progress",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -1647,18 +1647,34 @@
           "expected": "存储契约测试通过"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "PowerShell 7: backend/.venv/Scripts/python.exe -m pytest backend/tests/storage/test_contract.py -q -p no:cacheprovider --basetemp E:\\work\\LiteMCP\\.pytest-storage-green",
+          "result": "7 passed; filesystem and S3-compatible fake contract cases cover put/get/delete, SHA-256 digest, portable keys, namespace escape rejection, and identical boundary outcomes.",
+          "recorded_at": "2026-08-13"
+        },
+        {
+          "kind": "validation",
+          "command": "PowerShell 7: backend/.venv/Scripts/ruff.exe check backend/src backend/tests; backend/.venv/Scripts/python.exe -m mypy backend/src; backend/.venv/Scripts/python.exe -m pytest backend/tests --ignore=backend/tests/db -q -p no:cacheprovider",
+          "result": "ruff clean; mypy clean for 15 source files; 68 non-database backend tests passed.",
+          "recorded_at": "2026-08-13"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/src/litemcp/storage.py",
+          "backend/tests/storage/test_contract.py"
+        ],
         "commits": []
       },
       "blocker": null,
-      "notes": ""
+      "notes": "完整 backend/tests 回归在 120 秒内因现有数据库相关测试错误/超时未完成；数据库矩阵仍需在 PostgreSQL/MySQL 可用时补跑。"
     },
     {
       "id": "M1-CONC-001",
