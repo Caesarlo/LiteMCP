@@ -1703,11 +1703,16 @@
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
-        "commits": []
+        "files": [
+          "backend/src/litemcp/db/repository.py",
+          "backend/tests/db/test_optimistic_lock.py"
+        ],
+        "commits": [
+          "c976566"
+        ]
       },
       "blocker": null,
-      "notes": ""
+      "notes": "实现与测试已提交；真实 PostgreSQL/MySQL 验证因 Docker Desktop 不可用而阻塞，恢复服务后必须运行 make test-db-contract TEST=optimistic_lock。"
     },
     {
       "id": "M1-DELETE-001",
