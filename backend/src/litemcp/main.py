@@ -32,13 +32,21 @@ from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from litemcp.core.config import get_settings
 from litemcp.correlation import CorrelationIdMiddleware
+from litemcp.security.redaction import (
+    SecretRedactionMiddleware,
+    SecretRedactor,
+    install_logging_redaction,
+)
 
 # Short probe timeout so a stalled dependency fails fast instead of hanging
 # /readyz.
 _PROBE_TIMEOUT = 2.0
 
 app = FastAPI(title="LiteMCP")
+_app_redactor = SecretRedactor.from_environment()
+install_logging_redaction(_app_redactor)
 app.add_middleware(CorrelationIdMiddleware)
+app.add_middleware(SecretRedactionMiddleware, redactor=_app_redactor)
 
 
 @app.get("/livez")

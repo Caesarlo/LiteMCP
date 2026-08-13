@@ -11,6 +11,8 @@ import asyncio
 import logging
 import os
 
+from litemcp.security.redaction import SecretRedactor, install_logging_redaction
+
 LOGGER = logging.getLogger("litemcp.workers")
 
 
@@ -28,6 +30,7 @@ async def _placeholder_loop() -> None:
 
 def main() -> None:
     logging.basicConfig(level=os.environ.get("LITEMCP_LOG_LEVEL", "INFO"))
+    install_logging_redaction(SecretRedactor.from_environment())
     asyncio.run(_placeholder_loop())
 
 

@@ -1576,7 +1576,7 @@
       "area": "security",
       "title": "建立统一秘密脱敏器",
       "behavior": "日志、异常、审计和对象 repr 不输出密码、Token、Key 或连接秘密。负向：脱敏必须在异常被未捕获时（如中间件兜底 500 响应）依然生效；嵌套在自定义异常 __cause__/__context__ 链中的秘密也必须被脱敏；脱敏器本身抛错时不得回退为输出原始值。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": [],
       "verification": [
         {
@@ -1590,18 +1590,44 @@
           "expected": "behavior 中的每条负向用例都有对应测试，而非仅验证正常路径的日志调用被脱敏"
         }
       ],
-      "evidence": [],
+      "evidence": [
+        {
+          "kind": "test",
+          "command": "PowerShell 7: backend/.venv/Scripts/python.exe -m pytest tests/security -q",
+          "result": "18 passed. Covers logs, exceptions, audit/repr payloads, uncaught 500 responses, nested cause/context chains, fail-closed redaction, common sensitive assignments/headers/mappings, Fernet keys/ciphertexts, and API-key tampering.",
+          "recorded_at": "2026-08-12"
+        },
+        {
+          "kind": "validation",
+          "command": "PowerShell 7: backend/.venv/Scripts/ruff.exe check src tests; backend/.venv/Scripts/python.exe -m mypy src; node scripts/validate-feature-list.js; git diff --check",
+          "result": "All checks passed; feature list structurally valid; no whitespace errors.",
+          "recorded_at": "2026-08-12"
+        },
+        {
+          "kind": "manual review",
+          "command": "Independent spec and quality reviews plus direct PowerShell smoke checks",
+          "result": "Production logging/worker wiring, audit redaction, safe request-ID preservation/generation, variable-length Fernet masking, common credential-pattern masking, nested exception sanitization, and fail-closed boundaries reviewed and validated. Full DB suite remains unavailable because PostgreSQL/MySQL services were not running.",
+          "recorded_at": "2026-08-12"
+        }
+      ],
       "source_refs": [
         "docs/architecture/01-data-model.md",
         "docs/architecture/08-implementation-plan.md",
         "docs/architecture/09-verification.md"
       ],
       "implementation": {
-        "files": [],
+        "files": [
+          "backend/src/litemcp/security/redaction.py",
+          "backend/src/litemcp/security/__init__.py",
+          "backend/src/litemcp/security/api_keys.py",
+          "backend/src/litemcp/workers/__main__.py",
+          "backend/src/litemcp/main.py",
+          "backend/tests/security/test_redaction.py"
+        ],
         "commits": []
       },
       "blocker": null,
-      "notes": ""
+      "notes": "按独立 TDD 对话执行：测试写手仅依据 contract 创建测试并由控制会话确认 RED；实现者独立完成生产代码；随后经过独立 spec/quality review 多轮修复。全后端数据库回归因本机 PostgreSQL/MySQL 未启动未完成，已明确记录。"
     },
     {
       "id": "M1-STORAGE-001",

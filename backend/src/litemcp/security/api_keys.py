@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import re
 import secrets
 from dataclasses import dataclass
 from typing import Any, Protocol
+
+from litemcp.security.redaction import redact_audit_payload
 
 
 class _KeyRepository(Protocol):
@@ -32,6 +35,9 @@ class ApiKeyService:
     _PREFIX = "litemcp_"
     _PUBLIC_ID_LENGTH = 24
     _DISPLAY_PREFIX_LENGTH = 12
+    _PAYLOAD_LENGTH = 64
+    _TAG_LENGTH = 8
+    _TOKEN_MARKER = "A"
 
     def __init__(self, repository: _KeyRepository, logger: Any, audit: Any) -> None:
         self.repository = repository
@@ -41,8 +47,9 @@ class ApiKeyService:
     def generate_secret(self) -> str:
         """Generate a complete API key; override this seam in deterministic tests."""
         public_id = secrets.token_hex(self._PUBLIC_ID_LENGTH // 2)
-        secret = secrets.token_hex(32)
-        return f"{self._PREFIX}{public_id}_{secret}"
+        payload = secrets.token_hex(32)
+        tag = self._integrity_tag(public_id, payload)
+        return f"{self._PREFIX}{public_id}_{payload}{tag}{self._TOKEN_MARKER}"
 
     def create(self, service_id: str, name: str) -> CreatedApiKey:
         """Create a key and return its plaintext exactly once."""
@@ -103,9 +110,32 @@ class ApiKeyService:
         parts = plaintext.split("_", 2)
         if len(parts) != 3 or len(parts[1]) != cls._PUBLIC_ID_LENGTH:
             return None
-        if not parts[1].isalnum() or not parts[2]:
+        public_id, secret = parts[1], parts[2]
+        if not public_id.isalnum():
             return None
-        return parts[1]
+        # Accept the original 256-bit shape for keys issued before the
+        # integrity tag was introduced. New keys use a tagged payload.
+        if len(secret) == cls._PAYLOAD_LENGTH:
+            try:
+                int(secret, 16)
+            except ValueError:
+                return None
+            return public_id
+        tagged_length = cls._PAYLOAD_LENGTH + cls._TAG_LENGTH + len(cls._TOKEN_MARKER)
+        if len(secret) != tagged_length or not secret.endswith(cls._TOKEN_MARKER):
+            return None
+        payload = secret[: cls._PAYLOAD_LENGTH]
+        supplied_tag = secret[cls._PAYLOAD_LENGTH : -len(cls._TOKEN_MARKER)]
+        if not re.fullmatch(r"[0-9a-f]{64}", payload):
+            return None
+        if not hmac.compare_digest(supplied_tag, cls._integrity_tag(public_id, payload)):
+            return None
+        return public_id
+
+    @classmethod
+    def _integrity_tag(cls, public_id: str, payload: str) -> str:
+        material = f"{public_id}:{payload}".encode("ascii")
+        return hashlib.sha256(material).hexdigest()[: cls._TAG_LENGTH]
 
     @classmethod
     def _new_public_id(cls) -> str:
@@ -122,7 +152,7 @@ class ApiKeyService:
             "name": name,
         }
         self._emit(self.logger, "info", record)
-        self._emit(self.audit, "write", record)
+        self._emit(self.audit, "write", redact_audit_payload(record))
 
     def _record_failure(self, public_id: str, service_id: str, name: str) -> None:
         record = {
@@ -132,7 +162,7 @@ class ApiKeyService:
             "name": name,
         }
         self._emit(self.logger, "error", record)
-        self._emit(self.audit, "write", record)
+        self._emit(self.audit, "write", redact_audit_payload(record))
 
     @staticmethod
     def _emit(sink: Any, method: str, record: dict[str, str]) -> None:
