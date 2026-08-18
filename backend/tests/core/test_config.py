@@ -30,6 +30,13 @@ def _env(
     monkeypatch.delenv("LITEMCP_ENCRYPTION_KEYS", raising=False)
     monkeypatch.setenv("LITEMCP_DATABASE_URL", database_url)
     monkeypatch.setenv("LITEMCP_REDIS_URL", redis_url)
+    # Real-looking (not placeholder) values so TestProductionRefusal cases
+    # exercise only the specific unsafe setting under test, not the M2-AUTH-004
+    # admin JWT placeholder-rejection check.
+    monkeypatch.setenv(
+        "LITEMCP_ADMIN_JWT_SECRET", "test-admin-jwt-secret-" + "s" * 32
+    )
+    monkeypatch.setenv("LITEMCP_ADMIN_JWT_ISSUER", "https://auth.test.litemcp.invalid/")
     if encryption_keys is not None:
         monkeypatch.setenv("LITEMCP_ENCRYPTION_KEYS", ",".join(encryption_keys))
     for name, value in overrides.items():

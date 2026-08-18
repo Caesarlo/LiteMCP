@@ -33,6 +33,16 @@ _SAMPLE_KEY_MARKERS = (
     "your-",
 )
 
+# Default values for admin_jwt_secret/admin_jwt_issuer are obviously-fake
+# placeholders (never valid real secrets) so that dev/test environments and
+# most of the existing test suite need not configure them explicitly, while
+# production configuration is still forced to override them (see
+# ``_refuse_unsafe_production`` below and docs/architecture/02-admin-auth.md
+# §18, "ADMIN_JWT_ISSUER: 部署显式配置").
+_ADMIN_JWT_SECRET_PLACEHOLDER = "insecure-dev-only-admin-jwt-secret-change-me-" + "x" * 16
+_ADMIN_JWT_ISSUER_PLACEHOLDER = "insecure-dev-only-issuer-change-me"
+_PLACEHOLDER_MARKERS = (*_SAMPLE_KEY_MARKERS, "insecure", "placeholder", "dev-only")
+
 
 class Environment(StrEnum):
     """Deployment environment tiers understood by the application."""
@@ -98,6 +108,23 @@ class Settings(BaseSettings):
     argon2_time_cost: int = Field(default=2, ge=1)
     argon2_parallelism: int = Field(default=1, ge=1)
 
+    # --- admin login session (JWT + Redis refresh session, M2-AUTH-004) ---
+    # ``admin_jwt_secret``/``admin_jwt_issuer`` default to obviously-fake
+    # placeholders rather than being hard-required: this keeps every existing
+    # ``Settings``/``get_settings()`` construction across the test suite
+    # working without a supporting-fixture change, while
+    # ``_refuse_unsafe_production`` below still refuses to start a ``prod``
+    # process configured with either placeholder.
+    admin_jwt_secret: SecretStr = SecretStr(_ADMIN_JWT_SECRET_PLACEHOLDER)
+    admin_jwt_issuer: str = _ADMIN_JWT_ISSUER_PLACEHOLDER
+    admin_jwt_audience: str = "litemcp-admin-api"
+    admin_access_ttl_seconds: int = Field(default=900, ge=1)
+    admin_refresh_idle_ttl_seconds: int = Field(default=28800, ge=1)
+    admin_refresh_absolute_ttl_seconds: int = Field(default=604800, ge=1)
+    # Redis key namespace segment for admin sessions. Blank means "derive
+    # from ``environment`` at use time" -- see ``litemcp.auth.session``.
+    admin_session_environment: str = ""
+
     @field_validator("encryption_keys", mode="before")
     @classmethod
     def _split_encryption_keys(cls, value: object) -> object:
@@ -154,6 +181,21 @@ class Settings(BaseSettings):
                     "\"from cryptography.fernet import Fernet; "
                     "print(Fernet.generate_key().decode())\"`"
                 )
+        jwt_secret = self.admin_jwt_secret.get_secret_value()
+        if len(jwt_secret) < 32 or any(
+            marker in jwt_secret.lower() for marker in _PLACEHOLDER_MARKERS
+        ):
+            raise ValueError(
+                "production requires a real admin_jwt_secret (>=32 chars, "
+                "not the dev placeholder); set LITEMCP_ADMIN_JWT_SECRET"
+            )
+        if not self.admin_jwt_issuer or any(
+            marker in self.admin_jwt_issuer.lower() for marker in _PLACEHOLDER_MARKERS
+        ):
+            raise ValueError(
+                "production requires an explicit admin_jwt_issuer, not the "
+                "dev placeholder; set LITEMCP_ADMIN_JWT_ISSUER"
+            )
         return self
 
 

@@ -30,6 +30,7 @@ dependencies = [
     "mcp>=1.1",
     "jsonschema>=4.23",
     "bcrypt>=5.0.0",
+    "pyjwt[crypto]>=2.13.0",
 ]
 
 [project.scripts]

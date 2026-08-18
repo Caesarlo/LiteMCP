@@ -1874,14 +1874,28 @@
       "area": "auth",
       "title": "实现登录成功契约",
       "behavior": "有效凭据返回短期 Access JWT 并建立 Refresh Session。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-002"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_login.py","expected":"登录返回合规 Access JWT 并创建 Refresh Session"}],
-      "evidence": [],
+      "evidence": [
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_login.py -q -> 8 passed: JWT header/claims (alg/kid/typ, iss/aud/sub/sid/jti/iat/nbf/exp/token_type), configurable access TTL (default+override), refresh session persisted in Redis with required fields, secret hashed never stored raw, session registered in user_sessions set, two concurrent logins independent, idle/absolute expiry match documented defaults",
+        "ruff check src tests -> clean; mypy src -> no issues (21 files)",
+        "pytest tests/core tests/auth -q -> 60 passed (no regression from new required-with-placeholder-default admin_jwt_secret/issuer settings)",
+        "pytest -q --ignore=tests/db --ignore=tests/storage -> 104 passed",
+        "pytest tests/db -q -> 247 passed (full migration/dialect regression)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/session.py",
+          "backend/src/litemcp/core/config.py",
+          "backend/tests/auth/test_login.py",
+          "backend/tests/core/test_config.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为 DB/会话层 create_login_session（签发 Access JWT + 建立 Redis Refresh Session），无 HTTP 登录端点、无失败锁定/JWT 校验/刷新轮换（属于 M2-AUTH-005..010）。新增 admin_jwt_secret/issuer 等 Settings 字段，默认使用明显占位符，生产环境拒绝占位符（复用既有 _refuse_unsafe_production 校验器），避免破坏现有测试构造 Settings 的路径。新增 pyjwt[crypto] 依赖（uv add）。"
     },
     {
       "id": "M2-AUTH-005",
