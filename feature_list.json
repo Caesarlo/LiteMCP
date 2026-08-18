@@ -1787,14 +1787,28 @@
       "area": "auth",
       "title": "实现首个管理员初始化",
       "behavior": "空数据库只能通过受控引导流程创建首个全局管理员。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M1-MODEL-001", "M1-SEC-003"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_bootstrap.py","expected":"仅受控流程可创建首个管理员，重复初始化被拒绝"}],
-      "evidence": [],
+      "evidence": [
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_bootstrap.py -q -> 8 passed (postgres+mysql x 4 tests), incl. an asyncio.gather concurrency race with exactly one winner",
+        "ruff check src tests -> clean; mypy src -> no issues (18 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock",
+        "pytest -q --ignore=tests/db --ignore=tests/storage -> 69 passed (no regression)",
+        "pytest tests/db -q -> 247 passed (no regression, incl. migration graph)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/__init__.py",
+          "backend/src/litemcp/auth/bootstrap.py",
+          "backend/migrations/versions/m2_auth_001_bootstrap_lock.py",
+          "backend/tests/auth/test_bootstrap.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。CLI `litemcp admin create` 挂接留给后续 M2-AUTH 特性（本特性只交付受控 DB 层 bootstrap_first_admin，尚无可执行的 HTTP/CLI 入口，满足§4.1“无可复用 bootstrap 接口”的约束）。"
     },
     {
       "id": "M2-AUTH-002",
