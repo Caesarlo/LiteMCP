@@ -1845,14 +1845,27 @@
       "area": "auth",
       "title": "升级兼容的 bcrypt 密码",
       "behavior": "旧 bcrypt 用户成功登录后自动升级为 Argon2id，失败登录不修改摘要。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-002"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_password_migration.py","expected":"成功登录升级摘要，失败登录保持原摘要"}],
-      "evidence": [],
+      "evidence": [
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_password_migration.py -q -> 10 passed (postgres+mysql x 5 tests): bcrypt+correct migrates to argon2id and independently verifies; bcrypt+wrong leaves digest byte-identical; argon2id+correct succeeds without rehash; argon2id+wrong leaves hash unchanged; multi-attempt failure path never mutates the digest",
+        "ruff check src tests -> clean; mypy src -> no issues (20 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration needed, password_hash column reused)",
+        "pytest tests/auth -q -> 35 passed (bootstrap + argon2 + migration, no cross-feature regression)",
+        "pytest -q --ignore=tests/db --ignore=tests/storage -> 96 passed (no regression)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/password_migration.py",
+          "backend/pyproject.toml",
+          "backend/tests/auth/test_password_migration.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为 DB 层 verify_and_migrate_password（无登录/HTTP 端点，与 M2-AUTH-001/002 一致）；新增 bcrypt 依赖（uv add bcrypt）。"
     },
     {
       "id": "M2-AUTH-004",
