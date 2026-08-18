@@ -93,6 +93,11 @@ class Settings(BaseSettings):
     storage_backend: Literal["local"] = "local"
     storage_path: str = Field(default="./data/storage", min_length=1)
 
+    # --- password hashing (Argon2id, see M2-AUTH-002) ---
+    argon2_memory_cost_kib: int = Field(default=19456, ge=1)
+    argon2_time_cost: int = Field(default=2, ge=1)
+    argon2_parallelism: int = Field(default=1, ge=1)
+
     @field_validator("encryption_keys", mode="before")
     @classmethod
     def _split_encryption_keys(cls, value: object) -> object:

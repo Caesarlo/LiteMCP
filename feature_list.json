@@ -1817,14 +1817,26 @@
       "area": "auth",
       "title": "实现 Argon2id 密码存储",
       "behavior": "新密码使用配置化 Argon2id 参数哈希，验证时采用常量时间路径。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-001"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_password_argon2.py","expected":"Argon2id 参数生效且明文不落库"}],
-      "evidence": [],
+      "evidence": [
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_password_argon2.py -q -> 17 passed (PHC format, baseline m>=19456/t>=2/p>=1 floor, independent salts, configurable overrides, uniform PasswordVerificationError across wrong-password/malformed/wrong-algorithm/empty-hash)",
+        "ruff check src tests -> clean; mypy src -> no issues (19 files)",
+        "pytest tests/auth/test_bootstrap.py -q -> 8 passed (no regression on sibling M2-AUTH-001)",
+        "pytest -q --ignore=tests/db --ignore=tests/storage -> 86 passed (no regression)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/password.py",
+          "backend/src/litemcp/core/config.py",
+          "backend/tests/auth/test_password_argon2.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围严格限定为 §5.2 的可配置 Argon2id 哈希 + 统一验证失败路径；needs_rehash（登录成功时）、bcrypt 迁移、pepper/Secret Manager 属于 M2-AUTH-003/004，未在本特性内实现。bootstrap.py 仍保留内联 argon2.PasswordHasher()，未迁移到本模块，避免影响已 passing 的 M1-AUTH-001（记录为后续一致性收尾项，非阻塞）。"
     },
     {
       "id": "M2-AUTH-003",
