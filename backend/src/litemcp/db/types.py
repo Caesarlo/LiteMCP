@@ -66,14 +66,14 @@ class ID(TypeDecorator[Any]):
     def process_bind_param(self, value: Any, dialect: Any) -> Any:
         if value is None:
             return None
-        if dialect.name == "mysql":
+        if dialect.name != "postgresql":
             return str(value)
         return value
 
     def process_result_value(self, value: Any, dialect: Any) -> Any:
         if value is None:
             return None
-        if dialect.name == "mysql":
+        if dialect.name != "postgresql":
             return value if isinstance(value, uuid.UUID) else uuid.UUID(str(value))
         return value
 
@@ -90,9 +90,9 @@ class UTC_TS(TypeDecorator[Any]):
     cache_ok = True
 
     def load_dialect_impl(self, dialect: Any) -> Any:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(DateTime(timezone=True))
-        return dialect.type_descriptor(DATETIME(fsp=6))
+        if dialect.name == "mysql":
+            return dialect.type_descriptor(DATETIME(fsp=6))
+        return dialect.type_descriptor(DateTime(timezone=True))
 
     def process_bind_param(self, value: Any, dialect: Any) -> Any:
         if value is None:
@@ -135,9 +135,9 @@ class CIPHERTEXT(TypeDecorator[Any]):
     cache_ok = True
 
     def load_dialect_impl(self, dialect: Any) -> Any:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(LargeBinary())
-        return dialect.type_descriptor(LONGBLOB())
+        if dialect.name == "mysql":
+            return dialect.type_descriptor(LONGBLOB())
+        return dialect.type_descriptor(LargeBinary())
 
 
 class LONG_TEXT(TypeDecorator[Any]):
@@ -147,9 +147,9 @@ class LONG_TEXT(TypeDecorator[Any]):
     cache_ok = True
 
     def load_dialect_impl(self, dialect: Any) -> Any:
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(Text())
-        return dialect.type_descriptor(LONGTEXT())
+        if dialect.name == "mysql":
+            return dialect.type_descriptor(LONGTEXT())
+        return dialect.type_descriptor(Text())
 
 
 class ENUM_CODE(TypeDecorator[Any]):

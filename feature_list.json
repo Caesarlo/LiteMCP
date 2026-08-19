@@ -1963,12 +1963,25 @@
       "area": "auth",
       "title": "实现 Refresh Token 轮换",
       "behavior": "每次刷新签发新 Token 并原子撤销旧 Token。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-004"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_refresh_rotation.py","expected":"刷新原子轮换且旧 Token 立即失效"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/auth/test_refresh_rotation.py -q -> collection ERROR ModuleNotFoundError: No module named 'litemcp.auth.refresh'",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_refresh_rotation.py -q -> 20 passed (atomic rotate, old token immediately invalid, idle extends not past absolute, malformed/missing/idle/absolute/secret/user/password-changed rejections, concurrent single-winner, hmac.compare_digest)",
+        "ruff check src tests -> clean; mypy src -> no issues (24 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration)",
+        "pytest tests/core tests/auth -q -> 154 passed; pytest -q --ignore=tests/db --ignore=tests/storage -> 198 passed; pytest tests/db/test_types.py -q -> 6 passed (SQLite type fallbacks for create_all; PG/MySQL physical types unchanged)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/refresh.py",
+          "backend/src/litemcp/db/types.py",
+          "backend/tests/auth/test_refresh_rotation.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
       "notes": "从 M2 占位条目拆分。"
     },
