@@ -2021,14 +2021,27 @@
       "area": "auth",
       "title": "实现登出与会话撤销",
       "behavior": "用户可以撤销当前或全部 Refresh Session，后续刷新失败。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-007"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_logout_revoke.py","expected":"当前和全部会话撤销后 Refresh 失败"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/auth/test_logout_revoke.py -q -> 11 failed (ModuleNotFoundError: No module named 'litemcp.auth.logout')",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_logout_revoke.py -q -> 11 passed: current logout deletes admin_session + srem user_sessions then refresh fails; logout-all deletes every session for the user and leaves other users intact; unknown/wrong-secret current logout raises LogoutRejected without success audit; auth.logout / auth.logout_all audits omit token/secret/cookie/Authorization",
+        "ruff check src tests -> clean; mypy src -> no issues (25 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration)",
+        "pytest tests/core tests/auth -q -> 175 passed; pytest -q --ignore=tests/db --ignore=tests/storage -> 219 passed"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/logout.py",
+          "backend/src/litemcp/auth/refresh.py",
+          "backend/tests/auth/test_logout_revoke.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为应用层撤销当前/全部 Refresh Session（删除 Redis admin_session 并从 user_sessions 移除），撤销后 refresh 失败；写 audit_event action=auth.logout / auth.logout_all。无 HTTP logout Cookie/CSRF（M2-WEB-001）；Redis 故障可观测性（M2-AUTH-010）；不建 access jti 黑名单。测试用 SQLite audit_event + FakeRedis；refresh_session 是 FakeRedis JSON 会话的确认入口，生产轮换仍走 rotate_refresh_token。"
     },
     {
       "id": "M2-WEB-001",

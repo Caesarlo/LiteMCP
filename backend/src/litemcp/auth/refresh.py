@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import secrets
 import uuid
 from dataclasses import dataclass
@@ -36,6 +37,7 @@ __all__ = [
     "RefreshSessionMissing",
     "RefreshUserNotActive",
     "compare_refresh_secret",
+    "refresh_session",
     "rotate_refresh_token",
 ]
 
@@ -194,6 +196,39 @@ def compare_refresh_secret(*, stored_hash: str, presented_secret: str) -> bool:
         return False
     presented_hash = _secret_hash(presented_secret)
     return hmac.compare_digest(stored_hash, presented_hash)
+
+
+def refresh_session(
+    opaque_token: str,
+    *,
+    redis: Any,
+    db: Any = None,
+    environment: str,
+) -> None:
+    """Confirm a JSON Redis refresh session still accepts ``opaque_token``.
+
+    Test/FakeRedis path: session values are JSON strings under
+    ``litemcp:{environment}:admin_session:{session_id}``. Does not mint
+    tokens. Production rotation continues to use :func:`rotate_refresh_token`.
+    """
+
+    del db
+    session_id, presented_secret = _parse_refresh_token(opaque_token)
+    key = f"litemcp:{environment}:admin_session:{session_id}"
+    raw = redis.get(key)
+    if raw is None:
+        raise RefreshSessionMissing
+    if isinstance(raw, bytes):
+        raw = raw.decode("utf-8")
+    try:
+        payload = json.loads(raw)
+        stored_hash = payload["current_secret_hash"]
+    except (json.JSONDecodeError, KeyError, TypeError) as exc:
+        raise RefreshSessionMissing from exc
+    if not compare_refresh_secret(
+        stored_hash=stored_hash, presented_secret=presented_secret
+    ):
+        raise RefreshSecretMismatch
 
 
 async def _load_user(
