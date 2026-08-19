@@ -15,3 +15,6 @@ Thumbs.db
 # Local environment overrides (ports, etc.) — never committed.
 # .env.example is the committed template.
 .env
+
+# Editor settings (machine/user specific)
+.vscode/
