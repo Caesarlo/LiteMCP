@@ -1,11 +1,13 @@
-"""Application-layer refresh token rotation (M2-AUTH-007).
+"""Application-layer refresh token rotation and reuse detection.
 
-docs/architecture/02-admin-auth.md §8.1 / §8.3 / §8.4.
+docs/architecture/02-admin-auth.md §8.1 / §8.3 / §8.4 / §11 / §17.
 
 Issues a new Access JWT and opaque refresh secret for an existing session,
 replacing ``current_secret_hash`` with no grace window for the previous
-secret. HTTP routes, cookies, CSRF, audit persistence, logout, and
-session-family deletion on reuse are out of scope.
+secret. A presented secret that fails the constant-time compare against a
+live (not idle/absolute-expired) session revokes the Redis token family and
+persists ``auth.refresh_reuse_detected``. HTTP routes, cookies, CSRF, and
+logout remain out of scope.
 """
 
 from __future__ import annotations
@@ -20,7 +22,7 @@ from typing import Any, Protocol
 
 from litemcp.auth.session import _build_access_token, _session_environment
 from litemcp.core.config import Settings
-from litemcp.db.models import User
+from litemcp.db.models import AuditEvent, User
 from litemcp.db.session import AsyncSessionFactory
 
 __all__ = [
@@ -39,6 +41,9 @@ __all__ = [
 
 _USER_STATUS_ACTIVE = "active"
 _REFRESH_SECRET_BYTES = 32
+_REUSE_ACTION = "auth.refresh_reuse_detected"
+_REUSE_RESULT = "denied"
+_REUSE_RESOURCE_TYPE = "admin_session"
 
 
 class RefreshRejected(Exception):
@@ -96,6 +101,10 @@ class _RedisHashClient(Protocol):
 
     async def expire(self, key: str, seconds: int) -> bool: ...
 
+    async def delete(self, *keys: str) -> int: ...
+
+    async def srem(self, name: str, *values: str) -> int: ...
+
 
 def _as_utc(moment: datetime) -> datetime:
     if moment.tzinfo is None:
@@ -114,6 +123,55 @@ def _parse_iso(value: str) -> datetime:
 def _session_key(settings: Settings, session_id: str) -> str:
     environment = _session_environment(settings)
     return f"litemcp:{environment}:admin_session:{session_id}"
+
+
+def _user_sessions_key(settings: Settings, user_id: str) -> str:
+    environment = _session_environment(settings)
+    return f"litemcp:{environment}:user_sessions:{user_id}"
+
+
+async def _persist_refresh_reuse_audit(
+    session_factory: AsyncSessionFactory,
+    *,
+    session_id: str,
+    actor_id: str | None,
+    now: datetime,
+) -> None:
+    event = AuditEvent(
+        id=uuid.uuid4(),
+        occurred_at=now,
+        request_id=str(uuid.uuid4()),
+        actor_type="user" if actor_id is not None else "anonymous",
+        actor_id=actor_id,
+        action=_REUSE_ACTION,
+        resource_type=_REUSE_RESOURCE_TYPE,
+        resource_id=session_id,
+        result=_REUSE_RESULT,
+        reason_code="refresh_reuse_detected",
+    )
+    async with session_factory.session() as session:
+        session.add(event)
+        await session.commit()
+
+
+async def _revoke_refresh_family_on_reuse(
+    *,
+    redis: _RedisHashClient,
+    session_factory: AsyncSessionFactory,
+    settings: Settings,
+    session_id: str,
+    user_id_raw: str,
+    now: datetime,
+) -> None:
+    await redis.delete(_session_key(settings, session_id))
+    await redis.srem(_user_sessions_key(settings, user_id_raw), session_id)
+    actor_id = user_id_raw if _parse_user_id(user_id_raw) is not None else None
+    await _persist_refresh_reuse_audit(
+        session_factory,
+        session_id=session_id,
+        actor_id=actor_id,
+        now=now,
+    )
 
 
 def _parse_refresh_token(refresh_token: str) -> tuple[str, str]:
@@ -190,6 +248,14 @@ async def rotate_refresh_token(
     if not compare_refresh_secret(
         stored_hash=stored_hash, presented_secret=presented_secret
     ):
+        await _revoke_refresh_family_on_reuse(
+            redis=redis,
+            session_factory=session_factory,
+            settings=settings,
+            session_id=session_id,
+            user_id_raw=user_id_raw,
+            now=moment,
+        )
         raise RefreshSecretMismatch
 
     idle_ttl = timedelta(seconds=settings.admin_refresh_idle_ttl_seconds)

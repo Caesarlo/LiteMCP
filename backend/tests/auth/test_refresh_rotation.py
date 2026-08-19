@@ -15,8 +15,9 @@ Opaque refresh format is ``<session_id>.<random_secret>``. Redis hash key is
 ``litemcp:<admin_session_environment>:admin_session:<session_id>`` with fields
 from docs/architecture/02-admin-auth.md §8.3. ``current_secret_hash`` is the
 lowercase hex SHA-256 of the UTF-8 secret. Timestamps are timezone-aware
-ISO-8601 strings. Rotation must not mint tokens for a reused/wrong secret;
-this feature does not require session-family deletion or audit persistence.
+ISO-8601 strings. Rotation must not mint tokens for a reused/wrong secret.
+M2-AUTH-008 additionally revokes the Redis session family and writes
+``auth.refresh_reuse_detected`` on that mismatch path.
 """
 
 from __future__ import annotations
@@ -71,6 +72,7 @@ class MemoryRedis:
 
     def __init__(self) -> None:
         self._hashes: dict[str, dict[str, str]] = {}
+        self._sets: dict[str, set[str]] = {}
         self._expire_at: dict[str, datetime] = {}
 
     async def hset(
@@ -107,6 +109,28 @@ class MemoryRedis:
             return False
         self._expire_at[key] = datetime.now(UTC) + timedelta(seconds=seconds)
         return True
+
+    async def sadd(self, name: str, *values: str) -> int:
+        bucket = self._sets.setdefault(name, set())
+        added = 0
+        for value in values:
+            if value not in bucket:
+                bucket.add(value)
+                added += 1
+        return added
+
+    async def srem(self, name: str, *values: str) -> int:
+        bucket = self._sets.get(name)
+        if not bucket:
+            return 0
+        removed = 0
+        for value in values:
+            if value in bucket:
+                bucket.discard(value)
+                removed += 1
+        if not bucket:
+            del self._sets[name]
+        return removed
 
     async def ttl(self, key: str) -> int:
         if key not in self._hashes:
@@ -407,15 +431,14 @@ async def test_old_refresh_token_fails_immediately_with_no_grace_window(
             now=now + timedelta(seconds=1),
         )
 
-    second = await rotate_refresh_token(
-        rotated.refresh_token,
-        redis=redis,
-        session_factory=session_factory,
-        settings=settings,
-        now=now + timedelta(seconds=1),
-    )
-    assert second.refresh_token != rotated.refresh_token
-    assert second.access_token != rotated.access_token
+    with pytest.raises(RefreshSessionMissing):
+        await rotate_refresh_token(
+            rotated.refresh_token,
+            redis=redis,
+            session_factory=session_factory,
+            settings=settings,
+            now=now + timedelta(seconds=1),
+        )
 
 
 @pytest.mark.asyncio
@@ -595,10 +618,9 @@ async def test_wrong_secret_fails_closed_without_minting_tokens(
             now=now,
         )
 
-    after = await redis.hgetall(key)
-    assert after["current_secret_hash"] == before["current_secret_hash"]
-    assert after["current_secret_hash"] == _sha256_hex(secret)
-    assert after["user_id"] == str(user.id)
+    assert await redis.exists(key) == 0
+    assert before["current_secret_hash"] == _sha256_hex(secret)
+    assert before["user_id"] == str(user.id)
 
 
 def test_compare_refresh_secret_is_constant_time_and_fail_closed() -> None:
