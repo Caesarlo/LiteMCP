@@ -125,6 +125,11 @@ class Settings(BaseSettings):
     # from ``environment`` at use time" -- see ``litemcp.auth.session``.
     admin_session_environment: str = ""
 
+    # --- admin login lockout (M2-AUTH-005) ---
+    admin_login_failure_threshold: int = Field(default=5, ge=1)
+    admin_login_failure_window_seconds: int = Field(default=900, ge=1)
+    admin_lock_seconds: int = Field(default=900, ge=1)
+
     @field_validator("encryption_keys", mode="before")
     @classmethod
     def _split_encryption_keys(cls, value: object) -> object:

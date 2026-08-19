@@ -1904,14 +1904,27 @@
       "area": "auth",
       "title": "实现登录失败锁定",
       "behavior": "连续失败达到阈值后账户按规定时间锁定，成功登录重置计数。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-004"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_login_lockout.py","expected":"失败计数、锁定窗口和成功重置符合策略"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/auth/test_login_lockout.py -q -> 1 failed, 24 errors (ModuleNotFoundError litemcp.auth.lockout; Settings missing admin_login_failure_threshold)",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_login_lockout.py -q -> 25 passed (postgres+mysql): window/count/lock expiry, disabled precedence, success reset, concurrent FOR UPDATE increments, configurable threshold/lock seconds",
+        "ruff check src tests -> clean; mypy src -> no issues (22 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration; User lockout columns reused)",
+        "pytest tests/core tests/auth -q -> 85 passed; pytest -q --ignore=tests/db --ignore=tests/storage -> 129 passed"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/lockout.py",
+          "backend/src/litemcp/core/config.py",
+          "backend/tests/auth/test_login_lockout.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为 DB 层锁定状态机（prepare_login_attempt / record_login_failure / record_login_success），无 HTTP 登录端点、无 Redis 来源限速、无审计落库、无管理员手动解锁。Settings 新增 admin_login_failure_threshold/window/lock_seconds，默认 5/900/900。SELECT FOR UPDATE 保证并发失败不丢计数。"
     },
     {
       "id": "M2-AUTH-006",

@@ -12,14 +12,14 @@
 
 ## Current Verified State
 
-- Last updated: 2026-08-18
+- Last updated: 2026-08-19
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend tests now land with `M0-FE-001`: `cd frontend && npm run test -- --run`; wiring them into the root `make test` leg is a recorded candidate for the Makefile-owning feature, M0-CMD-001); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. Contract gates: `make test-openapi` compares the live `app.openapi()` against the committed `backend/src/litemcp/openapi.json` snapshot (M0-CONTRACT-001), and `make update-openapi-snapshot` regenerates that snapshot for explicitly approved contract changes. Fast CI gate: `make ci-fast` runs all seven legs — backend ruff/mypy/pytest + frontend eslint/tsc/vitest/vite build (M0-CI-001). Dialect gate: `make test-db-types` runs the cross-dialect type contract against real PostgreSQL + MySQL via Docker compose (M1-DB-002); port overrides live in a gitignored root `.env` (this machine uses POSTGRES_PORT=5433, MYSQL_PORT=3307 due to local postgres/mysqld on 5432/3306; `mysql` compose service is under the `dialects` profile). The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
-- Current blocker: None. Docker Desktop available (crashed and was manually restarted mid-session with an `inference manager` file-permission error; came back healthy on retry — no code-side fix needed). M1 milestone complete (17/17 passing); M2 in progress: 4/18 passing.
-- Last passing feature: `M2-AUTH-004` (实现登录成功契约; `litemcp.auth.session.create_login_session` issues a compliant `at+jwt` Access JWT (§7.2 header/claims) and establishes a Redis-backed Refresh Session (§8.1/§8.3: opaque `session_id.random_secret` token, hashed secret, idle+absolute TTL, `user_sessions` set) — DB/session-layer only, no HTTP login endpoint yet).
-- Next best step: activate `M2-AUTH-005` (实现登录失败锁定, priority 205, deps: check `feature_list.json`) or the next dependency-ready M2 feature — check `feature_list.json` for the current lowest-priority `not_started` M2 entry whose dependencies are all `passing`. Isolated TDD per AGENTS.md.
+- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 5/18 passing.
+- Last passing feature: `M2-AUTH-005` (实现登录失败锁定; `litemcp.auth.lockout` row-locks the user, applies the §6.3 observation-window/lock state machine, and resets counters on success — DB-layer only, no HTTP login endpoint).
+- Next best step: activate `M2-AUTH-006` (实现 Access JWT 校验, priority 206, dependency `M2-AUTH-004` passing). Isolated TDD: test-writer for `backend/tests/auth/test_access_jwt.py`, controller RED, fresh implementer, controller GREEN, then the declared gate plus auth/core regressions.
 
 ## Session Log
 
@@ -1116,3 +1116,37 @@
 - Files changed: `backend/src/litemcp/auth/session.py` (new), `backend/src/litemcp/core/config.py` (implementer), `backend/pyproject.toml`/`uv.lock` (pyjwt dependency), `backend/tests/auth/test_login.py` (test-writer + controller fixture fix + lint noqa), `backend/tests/core/test_config.py` (implementer, narrow fixture fix), `feature_list.json` (status → passing + evidence + implementation files), `progress.md`.
 - Verification: `cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_login.py -q` → 8 passed. `ruff check src tests` → clean. `mypy src` → no issues (21 files). Regression: `pytest tests/core tests/auth -q` → 60 passed; `pytest -q --ignore=tests/db --ignore=tests/storage` → 104 passed; `pytest tests/db -q` → 247 passed (full migration/dialect regression, confirming the new required-with-placeholder-default settings fields don't break any live-DB test's `Settings` construction). `node scripts/validate-feature-list.js` → 56 features, 36 passing, 0 in_progress, 0 blocked.
 - Next action: commit, then select the next dependency-ready M2 feature (`M2-AUTH-005`, 实现登录失败锁定, or whichever `not_started` M2 entry has all dependencies `passing`) via the same isolated TDD workflow.
+
+
+### Session 030 · 2026-08-19
+
+#### Checkpoint 84 · Status check: M2-AUTH-005 is next; Docker prerequisite currently down
+
+- Feature: none (status/planning only); no feature was activated.
+- Result: Startup workflow re-run per AGENTS.md. Repository root is `E:\work\LiteMCP`; `node scripts/validate-feature-list.js` exits 0 (56 features across 9 milestones: 36 passing, 0 in_progress, 0 blocked, 20 not_started); `core.hooksPath` is already `.githooks`; branch `main` matches `origin/main` at `88d56e8`; working tree was clean before this checkpoint. Dependency ordering selects `M2-AUTH-005` (priority 205, dependency `M2-AUTH-004` passing) ahead of the other ready M2 entries.
+- Architecture review: `docs/architecture/02-admin-auth.md` §6.3 requires a configurable 5-failures/15-minute observation window and 15-minute lock by default, disabled-state precedence, expired-lock reset before password verification, window restart after expiry, and counter/window reset on successful login. The existing `User` model already has `failed_login_count`, `failed_login_window_started_at`, and `locked_until`; lockout settings and the lockout service behavior are not implemented yet.
+- Verification: `backend/.venv/Scripts/python.exe -m pytest tests/auth/test_login.py tests/auth/test_password_argon2.py -q -p no:cacheprovider` → 17 passed, 8 skipped. The broader `tests/core tests/auth` run produced 34 passed, 8 skipped, 18 errors because Docker Desktop is not running and both live PostgreSQL/MySQL connections failed; `docker compose ps -a` independently confirmed the Docker Desktop Linux named pipe is absent. This is an environment prerequisite failure, not evidence of a code regression.
+- Risks: Git status emits access warnings for pre-existing `backend/pytest-of-35096/` and `pttmp-base/` directories; no tracked changes were present before updating this checkpoint. CodeGraph's on-disk index exists, but CodeGraph MCP tools were not exposed in this session, so the narrow model/config inspection used direct file reads.
+- Next action: start Docker Desktop; activate `M2-AUTH-005`; dispatch an isolated test-writer using only the feature behavior, declared verification, and §6.1/§6.3/§18 source contract; controller-run RED; dispatch a fresh implementer; controller-run GREEN and full declared/live-dialect regressions.
+
+### Session 031 · 2026-08-19
+
+#### Checkpoint 85 · M2-AUTH-005 activated
+
+- Feature: `M2-AUTH-005` (实现登录失败锁定).
+- Status change: `not_started` → `in_progress`.
+- Contract (docs/architecture/02-admin-auth.md §6.1/§6.3/§18, scoped narrowly to the DB-layer lockout state machine, matching AUTH-001..004): configurable 5-failures / 15-minute observation window / 15-minute lock by default (`ADMIN_LOGIN_FAILURE_THRESHOLD` / `ADMIN_LOGIN_FAILURE_WINDOW_SECONDS` / `ADMIN_LOCK_SECONDS`); `disabled` precedence (cannot auto-reactivate on lock expiry); expired lock reset to active with counter/window cleared before password verification; first failure on an active user opens a window; a failure after window expiry restarts the window at count 1; reaching the threshold writes `status=locked` and `locked_until`; successful login resets count and window. Concurrent failures must not drop counts. Out of scope: HTTP login endpoint, Redis source-IP rate limiting, Access JWT/refresh issuance, admin manual unlock, audit-event persistence.
+- Verification: `node scripts/validate-feature-list.js` passed before activation (36 passing, 1 in_progress, 0 blocked). Docker Desktop is now running; compose services that exited when the engine was down will be restarted before the RED gate.
+- Next action: dispatch isolated test-writer for `backend/tests/auth/test_login_lockout.py`.
+
+#### Checkpoint 86 · M2-AUTH-005 passed
+
+- Feature: `M2-AUTH-005` (实现登录失败锁定).
+- Status change: `in_progress` → `passing`.
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer subagent produced `backend/tests/auth/test_login_lockout.py` pinning `litemcp.auth.lockout` (`prepare_login_attempt`, `record_login_failure`, `record_login_success`, `LoginAttemptDecision`) plus Settings defaults 5/900/900. Controller RED: `1 failed, 24 errors` — `ModuleNotFoundError: No module named 'litemcp.auth.lockout'` on live dialect cases and `Settings` missing `admin_login_failure_threshold` — the missing module/fields, not a typo.
+  2. Fresh implementer added `backend/src/litemcp/auth/lockout.py` and three Settings fields. Functions never begin/commit; they `SELECT ... FOR UPDATE`. `disabled` is checked first and is never auto-reactivated; expired `locked` rows are cleared to `active` (count/window/`locked_until` reset) in `prepare_login_attempt` before password verify; window restart uses `now - window_started >= window_seconds`.
+- Files changed: `backend/tests/auth/test_login_lockout.py` (test-writer), `backend/src/litemcp/auth/lockout.py` (new), `backend/src/litemcp/core/config.py` (implementer), `feature_list.json`, `progress.md`.
+- Verification: controller GREEN `pytest tests/auth/test_login_lockout.py -q` → 25 passed. `ruff check src tests` clean. `mypy src` no issues (22 files). `alembic heads` → single head `m2_auth_001_bootstrap_lock` (no new migration). Regression: `pytest tests/core tests/auth -q` → 85 passed; `pytest -q --ignore=tests/db --ignore=tests/storage` → 129 passed. Full `tests/db` suite was not re-run this slice (no schema/migration change; lockout tests already upgrade both dialects to head).
+- Scope note: HTTP login, Redis IP rate limit, audit events, and admin manual unlock remain out of scope (later M2 features / HTTP slice).
+- Next action: commit when requested, then `M2-AUTH-006` (实现 Access JWT 校验) via the same isolated TDD workflow.
