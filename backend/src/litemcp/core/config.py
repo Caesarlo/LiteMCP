@@ -13,6 +13,7 @@ encryption keys are supplied.
 
 from __future__ import annotations
 
+import json
 import re
 from enum import StrEnum
 from functools import lru_cache
@@ -118,6 +119,13 @@ class Settings(BaseSettings):
     admin_jwt_secret: SecretStr = SecretStr(_ADMIN_JWT_SECRET_PLACEHOLDER)
     admin_jwt_issuer: str = _ADMIN_JWT_ISSUER_PLACEHOLDER
     admin_jwt_audience: str = "litemcp-admin-api"
+    admin_jwt_kid: str = "admin-jwt-2026-01"
+    admin_jwt_algorithm: str = "HS256"
+    admin_jwt_clock_skew_seconds: int = Field(default=30, ge=0)
+    # JSON object ``{kid: secret}`` of keys still valid for verification
+    # during rotation (current ``admin_jwt_kid`` is always taken from
+    # ``admin_jwt_secret``, not this map).
+    admin_jwt_previous_keys: dict[str, str] = Field(default_factory=dict)
     admin_access_ttl_seconds: int = Field(default=900, ge=1)
     admin_refresh_idle_ttl_seconds: int = Field(default=28800, ge=1)
     admin_refresh_absolute_ttl_seconds: int = Field(default=604800, ge=1)
@@ -144,6 +152,19 @@ class Settings(BaseSettings):
         """Accept comma-separated values from the environment."""
         if isinstance(value, str):
             return [item.strip() for item in value.split(",")]
+        return value
+
+    @field_validator("admin_jwt_previous_keys", mode="before")
+    @classmethod
+    def _parse_previous_jwt_keys(cls, value: object) -> object:
+        """Accept a JSON object ``{kid: secret}`` from the environment."""
+        if value is None or value == "":
+            return {}
+        if isinstance(value, str):
+            parsed: object = json.loads(value)
+            if not isinstance(parsed, dict):
+                raise TypeError("admin_jwt_previous_keys must be a JSON object")
+            return {str(kid): str(secret) for kid, secret in parsed.items()}
         return value
 
     @field_validator("encryption_keys", mode="after")

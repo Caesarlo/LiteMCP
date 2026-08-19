@@ -83,7 +83,7 @@ def _build_access_token(*, user: User, session_id: str, settings: object) -> tup
     headers = {
         "alg": _JWT_ALGORITHM,
         "typ": _JWT_TYPE,
-        "kid": secrets.token_hex(8),
+        "kid": settings.admin_jwt_kid,  # type: ignore[attr-defined]
     }
     secret = settings.admin_jwt_secret.get_secret_value()  # type: ignore[attr-defined]
     token = jwt.encode(claims, secret, algorithm=_JWT_ALGORITHM, headers=headers)
