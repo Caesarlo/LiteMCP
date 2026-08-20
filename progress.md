@@ -17,9 +17,9 @@
 - Active feature: None.
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend tests now land with `M0-FE-001`: `cd frontend && npm run test -- --run`; wiring them into the root `make test` leg is a recorded candidate for the Makefile-owning feature, M0-CMD-001); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. Contract gates: `make test-openapi` compares the live `app.openapi()` against the committed `backend/src/litemcp/openapi.json` snapshot (M0-CONTRACT-001), and `make update-openapi-snapshot` regenerates that snapshot for explicitly approved contract changes. Fast CI gate: `make ci-fast` runs all seven legs — backend ruff/mypy/pytest + frontend eslint/tsc/vitest/vite build (M0-CI-001). Dialect gate: `make test-db-types` runs the cross-dialect type contract against real PostgreSQL + MySQL via Docker compose (M1-DB-002); port overrides live in a gitignored root `.env` (this machine uses POSTGRES_PORT=5433, MYSQL_PORT=3307 due to local postgres/mysqld on 5432/3306; `mysql` compose service is under the `dialects` profile). The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
-- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 10/18 passing.
-- Last passing feature: `M2-WEB-001` (实施 CSRF 与 Origin 防护; cookie-backed login/refresh/logout POSTs require Origin/Referer allowlist + `Sec-Fetch-Site` not `cross-site` + `X-LiteMCP-Request: 1`; reject with HTTP 403).
-- Next best step: activate `M2-RBAC-001` (实现全局角色授权, priority 211, dependencies `M2-AUTH-006` and `M1-MODEL-007` passing). Isolated TDD. Note: `M2-AUTH-010` (Redis fail-closed, priority 214) is also unblocked.
+- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 11/18 passing.
+- Last passing feature: `M2-RBAC-001` (实现全局角色授权; DB current `user.role`/`status` gates admin-only global capabilities; JWT role claims ignored; last active admin cannot be disabled or demoted).
+- Next best step: activate `M2-RBAC-002` (实现服务对象级授权, priority 212, depends on passing `M2-RBAC-001` and `M1-MODEL-007`). Isolated TDD. Note: `M2-AUTH-010` (Redis fail-closed, priority 214) and `M2-STEPUP-001` (213, now unblocked) remain available.
 
 ## Session Log
 
@@ -1272,3 +1272,33 @@
 - Verification: controller GREEN `pytest tests/api/test_csrf_origin.py -q` → 27 passed. `ruff check src tests/api/test_csrf_origin.py` clean. `mypy src` no issues (26 files). `pytest tests/api tests/core -q` → 50 passed. `pytest tests/auth -k "not postgres and not mysql" -q` → 76 passed, 8 skipped. `pytest tests/contract/test_openapi_snapshot.py tests/api/test_csrf_origin.py -q` → 31 passed after snapshot regen.
 - Scope note: Full HTTP login/refresh/logout success (Set-Cookie, rotate, revoke) remains later work; this slice is the CSRF/Origin gate plus route existence so 403 can fire before 404.
 - Next action: commit when requested, then `M2-RBAC-001` (实现全局角色授权).
+
+### Session 037 · 2026-08-20
+
+#### Checkpoint 98 · M2-RBAC-001 activated
+
+- Feature: `M2-RBAC-001` (实现全局角色授权).
+- Status change: `not_started` → `in_progress`.
+- Baseline: `M2-AUTH-006` is passing (Access JWT + DB user status). `M1-MODEL-007` is passing (`user.role` is `admin`/`user`). No `tests/auth/test_global_rbac.py`. No application-layer global-capability gate yet.
+- Contract (`docs/architecture/02-admin-auth.md` §4.2/§10/§11/§12.1/§12.3): `user.role` is `admin`/`user`. Authorization uses the database current role (`CurrentUser`), never a JWT `role` claim. Admin may create/disable/enable users, change global roles, and view global audit; ordinary `user` (and team-admin identity) must be denied those capabilities. Unmatched operations default-deny. Last active admin cannot be disabled or demoted. Role change takes effect on the next request via DB reread. Out of scope: service object RBAC (`M2-RBAC-002`), step-up (`M2-STEPUP-001`), HTTP admin routers, Redis fail-closed (`M2-AUTH-010`).
+- Verification: `node scripts/validate-feature-list.js` passed before this activation (42 passing, 0 in_progress, 0 blocked).
+- Next action: dispatch isolated test-writer for `backend/tests/auth/test_global_rbac.py`.
+
+#### Checkpoint 99 · M2-RBAC-001 controller RED
+
+- Feature: `M2-RBAC-001`.
+- Result: Isolated test-writer produced `backend/tests/auth/test_global_rbac.py`. Controller RED: collection ERROR `ModuleNotFoundError: No module named 'litemcp.auth.rbac'` — missing module, not a typo.
+- Next action: dispatch a fresh implementer with the test file path and feature behavior only (do not edit test assertions).
+
+#### Checkpoint 100 · M2-RBAC-001 passed
+
+- Feature: `M2-RBAC-001` (实现全局角色授权).
+- Status change: `in_progress` → `passing`.
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer produced `backend/tests/auth/test_global_rbac.py` pinning `litemcp.auth.rbac` (`CurrentUser`, `Capability`, `authorize` / `has_capability`, last-active-admin helpers).
+  2. Controller RED: `ModuleNotFoundError: litemcp.auth.rbac`.
+  3. Fresh implementer added `backend/src/litemcp/auth/rbac.py`. `current_user_from_db` copies id/role/status from DB fields and discards `jwt_claims` / `is_team_admin` / `service_role`. Active `admin` holds the five global capabilities; unknown capabilities and non-active/non-admin actors default-deny. `authorize_disable_user` / `authorize_change_global_role` refuse removing the last active admin (`LastActiveAdminError`). Tests were not edited.
+- Files changed: `backend/tests/auth/test_global_rbac.py` (test-writer), `backend/src/litemcp/auth/rbac.py` (implementer), `feature_list.json`, `progress.md`.
+- Verification: controller GREEN `pytest tests/auth/test_global_rbac.py -q` → 34 passed. `ruff check src tests/auth/test_global_rbac.py` clean. `mypy src` no issues (27 files). `alembic heads` → single head `m2_auth_001_bootstrap_lock`. Regression: `pytest tests/core tests/auth -k "not postgres and not mysql" -q` → 127 passed, 8 skipped, 74 deselected.
+- Scope note: HTTP `/api/v1/admin/*` routers, service-object `mcp_service_permission` (`M2-RBAC-002`), and step-up (`M2-STEPUP-001`) remain out of scope. Last-admin checks trust the caller-supplied `active_admin_ids` set; wiring that set from a live DB query belongs with user-management endpoints.
+- Next action: commit when requested, then `M2-RBAC-002` (实现服务对象级授权).

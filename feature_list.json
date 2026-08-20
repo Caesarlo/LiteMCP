@@ -2080,14 +2080,26 @@
       "area": "authorization",
       "title": "实现全局角色授权",
       "behavior": "全局 admin 与普通用户只能访问各自允许的管理能力。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-006", "M1-MODEL-007"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_global_rbac.py","expected":"admin/user 管理能力边界和拒绝语义稳定"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/auth/test_global_rbac.py -q -> collection ERROR ModuleNotFoundError: No module named 'litemcp.auth.rbac'",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_global_rbac.py -q -> 34 passed: CurrentUser from DB role/status; JWT role claim ignored; admin-only create/disable/enable/change-role/view-global-audit; team-admin and service editor/viewer do not grant global caps; unknown capability default-deny; last active admin cannot be disabled or demoted",
+        "ruff check src tests/auth/test_global_rbac.py -> clean; mypy src -> no issues (27 files)",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration)",
+        "pytest tests/core tests/auth -k \"not postgres and not mysql\" -q -> 127 passed, 8 skipped, 74 deselected"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/rbac.py",
+          "backend/tests/auth/test_global_rbac.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为应用层 CurrentUser + Capability 门禁与最后 active admin 不变量；jwt_claims/is_team_admin/service_role 入参被丢弃。无 HTTP admin 路由、无 mcp_service_permission 对象级授权、无 step-up。"
     },
     {
       "id": "M2-RBAC-002",
