@@ -12,14 +12,14 @@
 
 ## Current Verified State
 
-- Last updated: 2026-08-19
+- Last updated: 2026-08-20
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend tests now land with `M0-FE-001`: `cd frontend && npm run test -- --run`; wiring them into the root `make test` leg is a recorded candidate for the Makefile-owning feature, M0-CMD-001); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. Contract gates: `make test-openapi` compares the live `app.openapi()` against the committed `backend/src/litemcp/openapi.json` snapshot (M0-CONTRACT-001), and `make update-openapi-snapshot` regenerates that snapshot for explicitly approved contract changes. Fast CI gate: `make ci-fast` runs all seven legs — backend ruff/mypy/pytest + frontend eslint/tsc/vitest/vite build (M0-CI-001). Dialect gate: `make test-db-types` runs the cross-dialect type contract against real PostgreSQL + MySQL via Docker compose (M1-DB-002); port overrides live in a gitignored root `.env` (this machine uses POSTGRES_PORT=5433, MYSQL_PORT=3307 due to local postgres/mysqld on 5432/3306; `mysql` compose service is under the `dialects` profile). The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
-- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 9/18 passing.
-- Last passing feature: `M2-AUTH-009` (实现登出与会话撤销; current and all-device Refresh Session revoke, subsequent refresh fails, `audit_event.action=auth.logout` / `auth.logout_all`).
-- Next best step: activate `M2-WEB-001` (实施 CSRF 与 Origin 防护, priority 210, dependency `M2-AUTH-004` passing). Isolated TDD: test-writer for `backend/tests/api/test_csrf_origin.py`, controller RED, fresh implementer, controller GREEN, then the declared gate. Note: AUTH-010 (Redis fail-closed) also has passing AUTH-007 and priority 214.
+- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 10/18 passing.
+- Last passing feature: `M2-WEB-001` (实施 CSRF 与 Origin 防护; cookie-backed login/refresh/logout POSTs require Origin/Referer allowlist + `Sec-Fetch-Site` not `cross-site` + `X-LiteMCP-Request: 1`; reject with HTTP 403).
+- Next best step: activate `M2-RBAC-001` (实现全局角色授权, priority 211, dependencies `M2-AUTH-006` and `M1-MODEL-007` passing). Isolated TDD. Note: `M2-AUTH-010` (Redis fail-closed, priority 214) is also unblocked.
 
 ## Session Log
 
@@ -1242,3 +1242,33 @@
 - Verification: controller GREEN `pytest tests/auth/test_logout_revoke.py -q` → 11 passed. `ruff check src tests` clean. `mypy src` no issues (25 files). `alembic heads` → single head `m2_auth_001_bootstrap_lock` (no new migration). Regression: `pytest tests/core tests/auth -q` → 175 passed; `pytest -q --ignore=tests/db --ignore=tests/storage` → 219 passed.
 - Scope note: HTTP `POST /auth/logout` and `POST /auth/logout-all` + cookies/CSRF (`M2-WEB-001`) and Redis fail-closed (`M2-AUTH-010`) remain out of scope. Audit persistence in this slice is a sync Core INSERT against the test `audit_event` table (SQLite fixture); HTTP/live-dialect ORM audit can be aligned when those routes land.
 - Next action: commit when requested, then `M2-WEB-001` (实施 CSRF 与 Origin 防护) via the same isolated TDD workflow.
+
+### Session 036 · 2026-08-20
+
+#### Checkpoint 95 · M2-WEB-001 activated
+
+- Feature: `M2-WEB-001` (实施 CSRF 与 Origin 防护).
+- Status change: `not_started` → `in_progress`.
+- Baseline: `M2-AUTH-004` is passing (application-layer login session). AUTH-007/008/009 are passing (refresh rotate/replay, logout revoke) but explicitly left HTTP Cookie/CSRF routes out of scope. `backend/tests/api/` currently has `test_health.py` only; no `test_csrf_origin.py`. No CSRF/Origin middleware or `/api/v1/auth/{login,refresh,logout}` HTTP routes in this feature's gate yet.
+- Contract (`docs/architecture/02-admin-auth.md` §3/§6.1/§8.2/§9.1/§13/§19): cookie-backed management writes (login, refresh, logout) must pass CSRF **and** allowed-Origin checks together. Access JWT stays in Authorization Header; ordinary admin APIs are not Cookie-auth. First version does **not** introduce a synchronizer CSRF token or double-submit cookie — defense is SameSite + Origin (fallback Referer when Origin missing) + `Sec-Fetch-Site` reject `cross-site` state-changing requests + custom `X-LiteMCP-Request: 1` on login/refresh/logout. Default same-Origin only; CORS must not let unknown Origins send that header. CSRF/Origin rejection is HTTP 403. GET must not cause side effects. Out of scope: RBAC, Redis fail-closed (`M2-AUTH-010`), full login-success HTTP contract beyond the CSRF/Origin gate, frontend shell.
+- Verification: `node scripts/validate-feature-list.js` passed before this activation (41 passing, 0 in_progress, 0 blocked).
+- Next action: dispatch isolated test-writer for `backend/tests/api/test_csrf_origin.py`.
+
+#### Checkpoint 96 · M2-WEB-001 controller RED
+
+- Feature: `M2-WEB-001`.
+- Result: Isolated test-writer produced `backend/tests/api/test_csrf_origin.py` (9 test functions, parametrized over login/refresh/logout). Controller RED: `18 failed, 9 passed`. Failures are HTTP 404 `{"detail":"Not Found"}` on cookie-backed POSTs expecting CSRF/Origin 403 — missing routes/protection, not a typo. The 9 passes are the allow-path and GET-not-write cases, which treat 404 as “not a CSRF 403 / not a 2xx write”.
+- Next action: dispatch a fresh implementer with the test file path and feature behavior only (do not edit test assertions).
+
+#### Checkpoint 97 · M2-WEB-001 passed
+
+- Feature: `M2-WEB-001` (实施 CSRF 与 Origin 防护).
+- Status change: `in_progress` → `passing`.
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer produced `backend/tests/api/test_csrf_origin.py` pinning `csrf_allowed_origins()` on `litemcp.main`, 403 reason codes `origin_denied` / `csrf_header` / `fetch_metadata`, and `X-LiteMCP-Request: 1`.
+  2. Controller RED: 18 failed on 404 vs expected 403.
+  3. Fresh implementer added `litemcp.security.csrf.require_cookie_write_csrf` and registered POST `/api/v1/auth/login|refresh|logout` with that dependency. After the gate, handlers are 401 stubs (`authentication_required`) — no JWT/session wiring. Supporting: regenerated `openapi.json` so M0-CONTRACT-001 matches the new paths.
+- Files changed: `backend/tests/api/test_csrf_origin.py` (test-writer), `backend/src/litemcp/security/csrf.py` (new), `backend/src/litemcp/main.py`, `backend/src/litemcp/openapi.json`, `feature_list.json`, `progress.md`.
+- Verification: controller GREEN `pytest tests/api/test_csrf_origin.py -q` → 27 passed. `ruff check src tests/api/test_csrf_origin.py` clean. `mypy src` no issues (26 files). `pytest tests/api tests/core -q` → 50 passed. `pytest tests/auth -k "not postgres and not mysql" -q` → 76 passed, 8 skipped. `pytest tests/contract/test_openapi_snapshot.py tests/api/test_csrf_origin.py -q` → 31 passed after snapshot regen.
+- Scope note: Full HTTP login/refresh/logout success (Set-Cookie, rotate, revoke) remains later work; this slice is the CSRF/Origin gate plus route existence so 403 can fire before 404.
+- Next action: commit when requested, then `M2-RBAC-001` (实现全局角色授权).

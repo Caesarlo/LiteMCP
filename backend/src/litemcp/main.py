@@ -26,12 +26,13 @@ from typing import Any
 
 import redis
 import sqlalchemy as sa
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from litemcp.core.config import get_settings
 from litemcp.correlation import CorrelationIdMiddleware
+from litemcp.security.csrf import require_cookie_write_csrf
 from litemcp.security.redaction import (
     SecretRedactionMiddleware,
     SecretRedactor,
@@ -47,6 +48,38 @@ _app_redactor = SecretRedactor.from_environment()
 install_logging_redaction(_app_redactor)
 app.add_middleware(CorrelationIdMiddleware)
 app.add_middleware(SecretRedactionMiddleware, redactor=_app_redactor)
+
+
+def csrf_allowed_origins() -> frozenset[str]:
+    """Return exact Origins allowed for cookie-backed CSRF checks.
+
+    Looked up at request time so tests can monkeypatch this name on
+    ``litemcp.main``. Production values come from ``Settings.allowed_origins``.
+    """
+    return frozenset(get_settings().allowed_origins)
+
+
+def _unauthenticated_auth_stub() -> JSONResponse:
+    """Placeholder after the CSRF/Origin gate; full login is a later feature."""
+    return JSONResponse(
+        status_code=401,
+        content={"reason": "authentication_required"},
+    )
+
+
+@app.post("/api/v1/auth/login", dependencies=[Depends(require_cookie_write_csrf)])
+async def login() -> JSONResponse:
+    return _unauthenticated_auth_stub()
+
+
+@app.post("/api/v1/auth/refresh", dependencies=[Depends(require_cookie_write_csrf)])
+async def refresh() -> JSONResponse:
+    return _unauthenticated_auth_stub()
+
+
+@app.post("/api/v1/auth/logout", dependencies=[Depends(require_cookie_write_csrf)])
+async def logout() -> JSONResponse:
+    return _unauthenticated_auth_stub()
 
 
 @app.get("/livez")

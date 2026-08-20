@@ -1,7 +1,7 @@
 {
   "project": "LiteMCP",
   "schema_version": "1.0",
-  "last_updated": "2026-08-19",
+  "last_updated": "2026-08-20",
   "rules": {
     "single_active_feature": true,
     "passing_requires_evidence": true,
@@ -2050,14 +2050,28 @@
       "area": "web-security",
       "title": "实施 CSRF 与 Origin 防护",
       "behavior": "所有依赖 Cookie 的管理写操作必须同时通过 CSRF 和允许 Origin 校验。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-AUTH-004"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/api/test_csrf_origin.py","expected":"缺失或错误 CSRF/Origin 的写操作被拒绝"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/api/test_csrf_origin.py -q -> 18 failed, 9 passed (HTTP 404 on cookie-backed POSTs expecting CSRF/Origin 403; missing routes/gate, not a typo)",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/api/test_csrf_origin.py -q -> 27 passed: Origin/Referer allowlist, Sec-Fetch-Site cross-site, X-LiteMCP-Request: 1, GET not a write",
+        "ruff check src tests/api/test_csrf_origin.py -> clean; mypy src -> no issues (26 files)",
+        "pytest tests/api tests/core -q -> 50 passed; pytest tests/auth -k \"not postgres and not mysql\" -q -> 76 passed, 8 skipped",
+        "make update-openapi-snapshot then pytest tests/contract/test_openapi_snapshot.py tests/api/test_csrf_origin.py -q -> 31 passed (supporting OpenAPI path add for login/refresh/logout stubs)"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/security/csrf.py",
+          "backend/src/litemcp/main.py",
+          "backend/src/litemcp/openapi.json",
+          "backend/tests/api/test_csrf_origin.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。第一版无 synchronizer CSRF token：Origin/Referer + Sec-Fetch-Site + X-LiteMCP-Request: 1。POST 处理器在 gate 之后是 401 stub（authentication_required），未挂接 create_login_session / rotate_refresh_token / logout。OpenAPI snapshot 因新增三条公开路径而更新。"
     },
     {
       "id": "M2-RBAC-001",
