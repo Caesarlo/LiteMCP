@@ -12,14 +12,14 @@
 
 ## Current Verified State
 
-- Last updated: 2026-08-20
+- Last updated: 2026-08-21
 - Repository root: `E:\work\LiteMCP`
 - Active feature: None.
 - Standard startup: Three paths now coexist. (1) Separate commands documented in `README.zh-CN.md`. (2) Root `Makefile` unified entry (`make help`, `test`, `lint`, `build`, `test-postgres`, `test-mysql`, `test-db-matrix` — `M0-CMD-001`) alongside `validate-env-example` (`M0-ENV-002`). (3) Compose orchestration (`M0-BOOT-001`): root `docker-compose.yml` starts database/redis/backend/worker/frontend via `docker compose up -d` (default PostgreSQL, ports 8000/5173/5432/6379; all `${VAR}` carry inline defaults so it parses without `.env`). Before any implementation work, run `node scripts/validate-feature-list.js` (Windows node; WSL bash lacks node/uv) and (once per clone) `git config core.hooksPath .githooks` — already set in this clone.
 - Standard verification: `make test` runs backend unit/integration tests (frontend tests now land with `M0-FE-001`: `cd frontend && npm run test -- --run`; wiring them into the root `make test` leg is a recorded candidate for the Makefile-owning feature, M0-CMD-001); `make lint` runs backend ruff + frontend eslint; `make build` runs backend compileall + frontend tsc/vite build. Contract gates: `make test-openapi` compares the live `app.openapi()` against the committed `backend/src/litemcp/openapi.json` snapshot (M0-CONTRACT-001), and `make update-openapi-snapshot` regenerates that snapshot for explicitly approved contract changes. Fast CI gate: `make ci-fast` runs all seven legs — backend ruff/mypy/pytest + frontend eslint/tsc/vitest/vite build (M0-CI-001). Dialect gate: `make test-db-types` runs the cross-dialect type contract against real PostgreSQL + MySQL via Docker compose (M1-DB-002); port overrides live in a gitignored root `.env` (this machine uses POSTGRES_PORT=5433, MYSQL_PORT=3307 due to local postgres/mysqld on 5432/3306; `mysql` compose service is under the `dialects` profile). The db-matrix targets (`test-postgres`/`test-mysql`/`test-db-matrix`) currently refuse to false-pass (exit non-zero with a prerequisite notice) until `M0-BOOT-001` compose + `M1-DB-*` dialect contracts exist; their real verification is declared by the corresponding M1 features. Windows-equivalent for backend tests: `cd backend && .venv/Scripts/python.exe -m pytest ...` (uv unavailable in WSL bash). `node scripts/validate-feature-list.js` is the repeatable structural/pass-gate check for `feature_list.json` itself; `make validate-env-example` (node, Windows-OK) gates `.env.example` coverage and no-real-secrets; `make validate-adr` (node, Windows-OK) gates `docs/adr/` structure and the 6 required M0 topic coverage.
-- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 11/18 passing.
-- Last passing feature: `M2-RBAC-001` (实现全局角色授权; DB current `user.role`/`status` gates admin-only global capabilities; JWT role claims ignored; last active admin cannot be disabled or demoted).
-- Next best step: activate `M2-RBAC-002` (实现服务对象级授权, priority 212, depends on passing `M2-RBAC-001` and `M1-MODEL-007`). Isolated TDD. Note: `M2-AUTH-010` (Redis fail-closed, priority 214) and `M2-STEPUP-001` (213, now unblocked) remain available.
+- Current blocker: None. Docker Desktop is running; compose `database`/`mysql`/`redis` are healthy (host ports 5433/3307/6379). M1 milestone complete (17/17 passing); M2 in progress: 12/18 passing.
+- Last passing feature: `M2-RBAC-002` (实现服务对象级授权; application-layer `authorize_service_action` over explicit `mcp_service_permission` grants + global admin bypass; IDOR ungranted IDs are not-found; token claims ignored).
+- Next best step: activate `M2-STEPUP-001` (实现敏感操作 Step-up, priority 213, depends on passing `M2-RBAC-001` and `M2-AUTH-002`). Isolated TDD. Note: `M2-AUTH-010` (Redis fail-closed, priority 214) remains available.
 
 ## Session Log
 
@@ -1302,3 +1302,33 @@
 - Verification: controller GREEN `pytest tests/auth/test_global_rbac.py -q` → 34 passed. `ruff check src tests/auth/test_global_rbac.py` clean. `mypy src` no issues (27 files). `alembic heads` → single head `m2_auth_001_bootstrap_lock`. Regression: `pytest tests/core tests/auth -k "not postgres and not mysql" -q` → 127 passed, 8 skipped, 74 deselected.
 - Scope note: HTTP `/api/v1/admin/*` routers, service-object `mcp_service_permission` (`M2-RBAC-002`), and step-up (`M2-STEPUP-001`) remain out of scope. Last-admin checks trust the caller-supplied `active_admin_ids` set; wiring that set from a live DB query belongs with user-management endpoints.
 - Next action: commit when requested, then `M2-RBAC-002` (实现服务对象级授权).
+
+### Session 038 · 2026-08-21
+
+#### Checkpoint 101 · M2-RBAC-002 activated
+
+- Feature: `M2-RBAC-002` (实现服务对象级授权).
+- Status change: `not_started` → `in_progress`.
+- Baseline: `M2-RBAC-001` is passing (global admin/user capabilities). `M1-MODEL-007` is passing (`mcp_service_permission` with `principal_type=user/team/everyone` and `role=editor/viewer`). No `tests/auth/test_service_rbac.py`. No application-layer service-object authorization yet.
+- Contract (`docs/architecture/02-admin-auth.md` §12.1/§12.2/§12.3/§12.4 plus the `visible`/`writable` formulas referenced from `01-data-model.md` §5.12): authorization for a service request is decided from the **specific service ID** plus explicit `mcp_service_permission` rows (and global `admin` bypass). Feature “owner” maps to the creator `principal_type=user, role=editor` row — the permission table has no separate `owner` role, only `editor`/`viewer`. Visibility: `admin(user) OR user-row OR everyone-row OR team-row for a team the user belongs to`. Writes: `admin(user) OR user-row with role=editor`. Team/`everyone` grants are viewer-only and equivalent to a user-viewer row. Team membership does **not** implicitly grant visibility. Having a grant on service A must not authorize service B (IDOR). Invisible resource → not-found; visible but action not allowed → forbidden. JWT must not be the permission source. Out of scope: HTTP service routers (`M4`), step-up (`M2-STEPUP-001`), Redis fail-closed (`M2-AUTH-010`), creator-immutable permission mutation transactions, SQL list-filter implementation.
+- Verification: `node scripts/validate-feature-list.js` passed before this activation (43 passing, 0 in_progress, 0 blocked).
+- Next action: dispatch isolated test-writer for `backend/tests/auth/test_service_rbac.py`.
+
+#### Checkpoint 102 · M2-RBAC-002 controller RED
+
+- Feature: `M2-RBAC-002`.
+- Result: Isolated test-writer produced `backend/tests/auth/test_service_rbac.py`. Controller RED: collection ERROR `ModuleNotFoundError: No module named 'litemcp.auth.service_rbac'` — missing module, not a typo.
+- Next action: dispatch a fresh implementer with the test file path and feature behavior only (do not edit test assertions).
+
+#### Checkpoint 103 · M2-RBAC-002 passed
+
+- Feature: `M2-RBAC-002` (实现服务对象级授权).
+- Status change: `in_progress` → `passing`.
+- Result (isolated TDD split per AGENTS.md):
+  1. Test-writer produced `backend/tests/auth/test_service_rbac.py` pinning `litemcp.auth.service_rbac.authorize_service_action` (`ALLOWED` / `FORBIDDEN` / `NOT_FOUND`) plus owner/editor/viewer matrix and IDOR not-found semantics.
+  2. Controller RED: collection ERROR `ModuleNotFoundError: No module named 'litemcp.auth.service_rbac'`.
+  3. Fresh implementer added `backend/src/litemcp/auth/service_rbac.py`. Visibility follows explicit `mcp_service_permission` rows (user / team / everyone) plus active global admin bypass; writes require a user-principal editor row or admin. `token_claims` is accepted and discarded. Ungranted service IDs return `not_found`; visible but disallowed actions return `forbidden`. Lint-only test import cleanup (`collections.abc`); assertions unchanged.
+- Files changed: `backend/tests/auth/test_service_rbac.py` (test-writer + ruff import), `backend/src/litemcp/auth/service_rbac.py` (implementer), `feature_list.json`, `progress.md`.
+- Verification: controller GREEN `pytest tests/auth/test_service_rbac.py -q` → 25 passed. `ruff check src tests/auth/test_service_rbac.py` clean. `mypy src` no issues (28 files). `alembic heads` → single head `m2_auth_001_bootstrap_lock` (no new migration). Regression: `pytest tests/core tests/auth -k "not postgres and not mysql" -q` → 152 passed, 8 skipped, 74 deselected.
+- Scope note: HTTP service routers, SQL list filtering, step-up (`M2-STEPUP-001`), Redis fail-closed (`M2-AUTH-010`), and creator-immutable permission-replacement transactions remain out of scope. Callers must pass current grant rows each time; this slice does not load `mcp_service_permission` from the database.
+- Next action: commit when requested, then `M2-STEPUP-001` (实现敏感操作 Step-up).

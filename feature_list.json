@@ -2108,14 +2108,26 @@
       "area": "authorization",
       "title": "实现服务对象级授权",
       "behavior": "服务 owner、editor、viewer 权限在读取和写入端点统一执行。",
-      "status": "not_started",
+      "status": "passing",
       "dependencies": ["M2-RBAC-001", "M1-MODEL-007"],
       "verification": [{"type":"automated","command":"cd backend && uv run pytest tests/auth/test_service_rbac.py","expected":"owner/editor/viewer 读写矩阵和 IDOR 语义通过"}],
-      "evidence": [],
+      "evidence": [
+        "controller RED: pytest tests/auth/test_service_rbac.py -q -> collection ERROR ModuleNotFoundError: No module named 'litemcp.auth.service_rbac'",
+        "cd backend && .venv/Scripts/python.exe -m pytest tests/auth/test_service_rbac.py -q -> 25 passed: creator/user-editor read+write; viewer reads allowed and writes forbidden; global admin bypass without permission rows; grant on service A does not authorize service B (NOT_FOUND not FORBIDDEN); team membership alone is not visible; team/everyone viewer grants are equivalent and not writable; inactive users denied; unmatched/global actions default-deny; JWT/token claims ignored",
+        "ruff check src tests/auth/test_service_rbac.py -> All checks passed; mypy src -> Success: no issues found in 28 source files",
+        "alembic heads -> single head m2_auth_001_bootstrap_lock (no new migration)",
+        "pytest tests/core tests/auth -k \"not postgres and not mysql\" -q -> 152 passed, 8 skipped, 74 deselected"
+      ],
       "source_refs": ["docs/architecture/02-admin-auth.md"],
-      "implementation": {"files": [], "commits": []},
+      "implementation": {
+        "files": [
+          "backend/src/litemcp/auth/service_rbac.py",
+          "backend/tests/auth/test_service_rbac.py"
+        ],
+        "commits": []
+      },
       "blocker": null,
-      "notes": "从 M2 占位条目拆分。"
+      "notes": "从 M2 占位条目拆分。范围为应用层 authorize_service_action：按具体 service ID 评估 mcp_service_permission 行 + 全局 admin 绕过；token_claims 入参被丢弃。不可见返回 not_found，可见但动作不允许返回 forbidden。无 HTTP 服务路由、无 step-up、无 SQL 列表过滤、无 creator 不可移除的权限替换事务。"
     },
     {
       "id": "M2-STEPUP-001",
